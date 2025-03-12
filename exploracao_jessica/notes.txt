@@ -1,0 +1,55 @@
+""" 
+imdb_title_id: 0
+title (english): 0
+original_title (original language): 0
+year: 1 ------> add from date_published
+date_published (year-month-day): 0
+genre: 0
+duration (minutes): 0
+country: 64
+language: 901 ------> add from country
+director: 87
+writer: 1572
+production_company: 4455
+actors: 69
+description: 2115 ------> remove
+avg_vote: 0
+votes: 0
+reviews_from_users: 7597
+reviews_from_critics: 11797
+weighted_average_vote: 0
+total_votes: 0
+mean_vote: 0
+median_vote: 0
+votes_10 (people that voted 10/10): 0
+...
+votes_1 (people that voted 1/10): 0
+allgenders_18age_avg_vote: 706
+allgenders_18age_votes (people between 18 and 30 years): 706
+allgenders_30age_avg_vote: 10
+allgenders_30age_votes: 10
+allgenders_45age_avg_vote: 80
+allgenders_45age_votes: 80
+males_allages_avg_vote: 1
+males_allages_votes: 1
+males_18age_avg_vote: 1465
+males_18age_votes: 1465
+males_30age_avg_vote: 12
+males_30age_votes: 12
+males_45age_avg_vote: 101
+males_45age_votes: 101
+females_allages_avg_vote: 81
+females_allages_votes: 81
+females_18age_avg_vote: 6521
+females_18age_votes: 6521
+females_30age_avg_vote: 944
+females_30age_votes: 944
+females_45age_avg_vote: 2798
+females_45age_votes: 2798
+top1000_voters_rating: 679
+top1000_voters_votes: 679
+us_voters_rating: 209
+us_voters_votes: 209
+non_us_voters_rating: 1
+non_us_voters_votes: 1 
+"""
