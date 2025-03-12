@@ -3,16 +3,11 @@
 
 #----- Importing libraries
 
-# array-processing package, it provides a high-performance multidimensional array object and tools
-import numpy as np  
-# data analysis toolkit, it presents a diverse range of utilities
-import pandas as pd  
-# command style functions that make matplotlib work like MATLAB
-import matplotlib.pyplot as plt  
-# statistical graphics, it is a data visualization library
-import seaborn as sns  
-# pretty print data structures
-import pprint
+import numpy as np # array-processing package
+import pandas as pd # data analysis toolkit
+import matplotlib.pyplot as plt # static, animated and interactive visualizations
+import seaborn as sns # data visualization library
+import pprint # data pretty printer
 
 
 #----- Loading the datasets
@@ -64,7 +59,7 @@ print(f"Colunas restantes: {list(imbd_merged.columns)}")
 print(len(imbd_merged.columns))
 
 
-#----- Next steps
+#----- Next steps - 13/03
 #----- Fill missing values
 #----- Data visualization
 
