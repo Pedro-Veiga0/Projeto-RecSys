@@ -1,0 +1,71 @@
+# Week 2: Data Exploration & Preprocessing
+
+
+#----- Importing libraries
+
+# array-processing package, it provides a high-performance multidimensional array object and tools
+import numpy as np  
+# data analysis toolkit, it presents a diverse range of utilities
+import pandas as pd  
+# command style functions that make matplotlib work like MATLAB
+import matplotlib.pyplot as plt  
+# statistical graphics, it is a data visualization library
+import seaborn as sns  
+# pretty print data structures
+import pprint
+
+
+#----- Loading the datasets
+
+# Note: The datasets were saved as CSV UTF-8 files; sep or delimiter
+imbd_movies = pd.read_csv(r'C:\Users\Asus\Desktop\mestrado\projeto_integrado_matematica_computacao\semana_dois\imdb_movies.csv', encoding = 'UTF-8', sep = ';') 
+imbd_ratings = pd.read_csv(r'C:\Users\Asus\Desktop\mestrado\projeto_integrado_matematica_computacao\semana_dois\imdb_ratings.csv', encoding = 'UTF-8', sep = ';')
+
+# Note: .head() doesn't print automatically in the terminal, unless we use e.g. Jupiter Notebook
+#print(imbd_movies.head())
+#print(imbd_ratings.head())
+
+#imbd_movies.info()
+#print('-----------------------------------')
+#imbd_ratings.info()
+
+
+#----- Merging the datasets
+
+# Note: inner join returns matching values in both tables
+imbd_merged = pd.merge(imbd_movies, imbd_ratings, how = "inner", on = "imdb_title_id")
+#print(imbd_merged.head())
+
+#print(f"Colunas: {list(imbd_merged.columns)}")
+#print(len(imbd_merged.columns))
+
+#----- Missing values
+
+missing = imbd_merged.isnull().sum()
+#print(missing)
+
+# or
+
+#print('---------------------------------------')
+missing_table = pd.DataFrame({'Columns': missing.index, 'Missing values': missing.values})
+#print(missing_table)
+
+
+#----- Dropping columns
+
+size = 0.5 * len(imbd_merged)
+
+# Note: inplace = True to modify the original DataFrame; 10 columns were dropped
+for column in imbd_merged.columns:
+    if imbd_merged[column].isnull().sum() > size:
+        imbd_merged.drop(columns = [column], inplace = True)
+
+print(f"Colunas restantes: {list(imbd_merged.columns)}")
+print(len(imbd_merged.columns))
+
+
+#----- Next steps
+#----- Fill missing values
+#----- Data visualization
+
+
