@@ -13,31 +13,31 @@ import pprint # data pretty printer
 #----- Loading the datasets
 
 # Note: The datasets were saved as CSV UTF-8 files; sep or delimiter
-imbd_movies = pd.read_csv(r'C:/Users\Asus\Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica\datasets/imdb_movies.csv', encoding = 'UTF-8', sep = ';') 
-imbd_ratings = pd.read_csv(r'C:/Users\Asus\Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica\datasets/imdb_ratings.csv', encoding = 'UTF-8', sep = ';')
+imdb_movies = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/datasets/imdb_movies.csv', encoding = 'UTF-8', sep = ';') 
+imdb_ratings = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/datasets/imdb_ratings.csv', encoding = 'UTF-8', sep = ';')
 
 # Note: .head() doesn't print automatically in the terminal, unless we use e.g. Jupiter Notebook
-#print(imbd_movies.head())
-#print(imbd_ratings.head())
+#print(imdb_movies.head())
+#print(imdb_ratings.head())
 
-#imbd_movies.info()
+#imdb_movies.info()
 #print('-----------------------------------')
-#imbd_ratings.info()
+#imdb_ratings.info()
 
 
 #----- Merging the datasets
 
 # Note: inner join returns matching values in both tables
-imbd_merged = pd.merge(imbd_movies, imbd_ratings, how = "inner", on = "imdb_title_id")
-#print(imbd_merged.head())
+imdb_merged = pd.merge(imdb_movies, imdb_ratings, how = "inner", on = "imdb_title_id")
+#print(imdb_merged.head())
 
-#print(f"Colunas: {list(imbd_merged.columns)}")
-#print(len(imbd_merged.columns))
+#print(f"Colunas: {list(imdb_merged.columns)}")
+#print(len(imdb_merged.columns))
 
 
 #----- Missing values
 
-missing = imbd_merged.isnull().sum()
+missing = imdb_merged.isnull().sum()
 #print(missing)
 
 # or
@@ -49,21 +49,21 @@ missing_table = pd.DataFrame({'Columns': missing.index, 'Missing values': missin
 
 #----- Dropping columns
 
-size = len(imbd_merged)
+size = len(imdb_merged)
 
 # Note: inplace = True modifies the original DataFrame; 10 columns were dropped
-for column in imbd_merged.columns:
-    if imbd_merged[column].isnull().sum() > 0.5*size:
-        imbd_merged.drop(columns = [column], inplace = True)
+for column in imdb_merged.columns:
+    if imdb_merged[column].isnull().sum() > 0.5*size:
+        imdb_merged.drop(columns = [column], inplace = True)
 
-#print(f"Colunas restantes: {list(imbd_merged.columns)}")
-#print(len(imbd_merged.columns))
+#print(f"Colunas restantes: {list(imdb_merged.columns)}")
+#print(len(imdb_merged.columns))
 
 
 #----- Processing missing values -------------- IN PROGRESS
 # TASK: Fill missing values
 
-missing_values_list = [(col, int(imbd_merged[col].isnull().sum())) for col in imbd_merged.columns]
+missing_values_list = [(col, int(imdb_merged[col].isnull().sum())) for col in imdb_merged.columns]
 
 #for col, missing in missing_values_list:
 #    print(f"{col}: {missing}")
@@ -74,29 +74,85 @@ missing_values_list = [(col, int(imbd_merged[col].isnull().sum())) for col in im
 # Barplot with genres
 
 # Note: the genres are separated by commas; .explode() splits the elements into new rows
-genres_30 = imbd_merged['genre'].str.split(',').explode().value_counts().head(30)
+genres_30 = imdb_merged['genre'].str.split(',').explode().value_counts().head(30)
 #print(genres)
 
+plt.figure(figsize = (10, 6))
 barplot_genres = sns.barplot(x = genres_30.values, y = genres_30.index) 
-plt.title('Count of Genres')
+plt.title('Count of Votes by Genres')
 plt.xlabel('Count')
 plt.ylabel('Genre')
 #plt.show()
 
+
 # Pie chart with countries
 
-countries_10 = imbd_merged['country'].value_counts().head(10)
+countries_10 = imdb_merged['country'].value_counts().head(10)
 #print(countries_10)
 
 # Note: equal ensures that pie chart is drawn as a circle;
 # %1.1f displays a decimal number with 1 decimal place; %% displays the % symbol
 plt.figure(figsize = (10, 6))
 plt.pie(countries_10, labels = countries_10.index, autopct = '%1.1f%%')
-plt.title('Count of Countries')
+plt.title('Count of Votes by Countries')
 plt.axis('equal')  
 plt.tight_layout()
 #plt.show() 
 
 
+# Most popular movies
+
+top_movies = imdb_merged.nlargest(10, 'total_votes')
+#print(top_movies)
+
+plt.figure(figsize = (13, 6))
+sns.barplot(y = top_movies['title'], x = top_movies['total_votes'])
+plt.title('Most Popular Movies by Votes')
+plt.xlabel('Total Votes')
+plt.ylabel('Movie Title')
+plt.tight_layout()
+#plt.show()
+
+
+# Distribution of average votes
+
+# Note: kde = True creates a smoothed curve over the histogram
+plt.figure(figsize = (10, 6))
+sns.histplot(imdb_merged['avg_vote'], bins = 20, kde = True)
+plt.title('Distribution of Average Votes')
+plt.xlabel('Average Votes')
+plt.ylabel('Frequency')
+#plt.show()
+
+
+# Average votes by gender and age 
+
+gender_age_ratings = pd.DataFrame({
+'Age Class': ['18-29', '30-44', '45+'],
+
+    'Male': [imdb_merged['males_18age_avg_vote'].mean(),
+                  imdb_merged['males_30age_avg_vote'].mean(),
+                  imdb_merged['males_45age_avg_vote'].mean()],
+
+    'Female': [imdb_merged['females_18age_avg_vote'].mean(),
+                 imdb_merged['females_30age_avg_vote'].mean(),
+                 imdb_merged['females_45age_avg_vote'].mean()]
+})
+
+# Note: melt() unpivots the DataFrame from wide to long format
+gender_age_ratings = gender_age_ratings.melt(id_vars = 'Age Class', var_name = 'Gender', value_name = 'Average Vote')
+plt.figure(figsize = (10, 6))
+sns.barplot(x = 'Age Class', y = 'Average Vote', hue = 'Gender', data = gender_age_ratings, palette = 'coolwarm')
+
+plt.title('Mean Average Vote by Gender and Age')
+plt.xlabel('Age Class')
+plt.ylabel('Mean Average Vote')
+plt.ylim(0, 8)
+plt.legend(title = 'Gender')
+plt.show()
+
+
+
 #----- TO DO -------------
-#----- Fill missing values
+#----- Handle missing values
+#----- Save plots as images automatically and upload to GitHub
