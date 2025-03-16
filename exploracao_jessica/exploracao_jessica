@@ -1,5 +1,8 @@
 # Week 2: Data Exploration & Preprocessing
 
+# -> In-depth data exploration using Pandas (data types, missing values, distributions, basic statistics).
+# -> Data cleaning and preprocessing (handling missing values, data transformations).
+
 
 #----- Importing libraries
 
@@ -12,7 +15,7 @@ import pprint # data pretty printer
 
 #----- Loading the datasets
 
-# Note: The datasets were saved as CSV UTF-8 files; sep or delimiter
+# Note: the datasets were saved as CSV UTF-8 files; sep or delimiter
 imdb_movies = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/datasets/imdb_movies.csv', encoding = 'UTF-8', sep = ';') 
 imdb_ratings = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/datasets/imdb_ratings.csv', encoding = 'UTF-8', sep = ';')
 
@@ -69,90 +72,9 @@ missing_values_list = [(col, int(imdb_merged[col].isnull().sum())) for col in im
 #    print(f"{col}: {missing}")
 
 
-#----- Data visualization
 
-# Barplot with genres
-
-# Note: the genres are separated by commas; .explode() splits the elements into new rows
-genres_30 = imdb_merged['genre'].str.split(',').explode().value_counts().head(30)
-#print(genres)
-
-plt.figure(figsize = (10, 6))
-barplot_genres = sns.barplot(x = genres_30.values, y = genres_30.index) 
-plt.title('Count of Votes by Genres')
-plt.xlabel('Count')
-plt.ylabel('Genre')
-#plt.show()
-
-
-# Pie chart with countries
-
-countries_10 = imdb_merged['country'].value_counts().head(10)
-#print(countries_10)
-
-# Note: equal ensures that pie chart is drawn as a circle;
-# %1.1f displays a decimal number with 1 decimal place; %% displays the % symbol
-plt.figure(figsize = (10, 6))
-plt.pie(countries_10, labels = countries_10.index, autopct = '%1.1f%%')
-plt.title('Count of Votes by Countries')
-plt.axis('equal')  
-plt.tight_layout()
-#plt.show() 
-
-
-# Most popular movies
-
-top_movies = imdb_merged.nlargest(10, 'total_votes')
-#print(top_movies)
-
-plt.figure(figsize = (13, 6))
-sns.barplot(y = top_movies['title'], x = top_movies['total_votes'])
-plt.title('Most Popular Movies by Votes')
-plt.xlabel('Total Votes')
-plt.ylabel('Movie Title')
-plt.tight_layout()
-#plt.show()
-
-
-# Distribution of average votes
-
-# Note: kde = True creates a smoothed curve over the histogram
-plt.figure(figsize = (10, 6))
-sns.histplot(imdb_merged['avg_vote'], bins = 20, kde = True)
-plt.title('Distribution of Average Votes')
-plt.xlabel('Average Votes')
-plt.ylabel('Frequency')
-#plt.show()
-
-
-# Average votes by gender and age 
-
-gender_age_ratings = pd.DataFrame({
-'Age Class': ['18-29', '30-44', '45+'],
-
-    'Male': [imdb_merged['males_18age_avg_vote'].mean(),
-                  imdb_merged['males_30age_avg_vote'].mean(),
-                  imdb_merged['males_45age_avg_vote'].mean()],
-
-    'Female': [imdb_merged['females_18age_avg_vote'].mean(),
-                 imdb_merged['females_30age_avg_vote'].mean(),
-                 imdb_merged['females_45age_avg_vote'].mean()]
-})
-
-# Note: melt() unpivots the DataFrame from wide to long format
-gender_age_ratings = gender_age_ratings.melt(id_vars = 'Age Class', var_name = 'Gender', value_name = 'Average Vote')
-plt.figure(figsize = (10, 6))
-sns.barplot(x = 'Age Class', y = 'Average Vote', hue = 'Gender', data = gender_age_ratings, palette = 'coolwarm')
-
-plt.title('Mean Average Vote by Gender and Age')
-plt.xlabel('Age Class')
-plt.ylabel('Mean Average Vote')
-plt.ylim(0, 8)
-plt.legend(title = 'Gender')
-plt.show()
-
-
-
-#----- TO DO -------------
+#----- TO DO -------------------------------
 #----- Handle missing values
+#----- Handle data types
+#----- Basic statistic
 #----- Save plots as images automatically and upload to GitHub
