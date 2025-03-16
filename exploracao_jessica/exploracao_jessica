@@ -63,8 +63,38 @@ for column in imdb_merged.columns:
 #print(len(imdb_merged.columns))
 
 
-#----- Processing missing values -------------- IN PROGRESS
-# TASK: Fill missing values
+#----- Handle data types
+
+# Note: optimization of the data types reduces memory usage and improves processing speed while preserving the necessary precision
+
+#for coluna in imdb_merged.select_dtypes(include = ["int64"]).columns:
+#    print(f"{coluna}: min = {imdb_merged[coluna].min()}, max = {imdb_merged[coluna].max()}")
+
+#for coluna in imdb_merged.select_dtypes(include = ["float64"]).columns:
+#    print(f"{coluna}: min = {imdb_merged[coluna].min()}, max = {imdb_merged[coluna].max()}")
+
+#print(np.iinfo(np.int8))
+#print(np.iinfo(np.int16))
+#print(np.iinfo(np.int32))
+
+for coluna in imdb_merged.select_dtypes(include = ["float64"]).columns:
+    imdb_merged[coluna] = imdb_merged[coluna].astype("float16")
+
+for coluna in imdb_merged.select_dtypes(include = ["int64"]).columns:
+    minimo = imdb_merged[coluna].min()
+    maximo = imdb_merged[coluna].max()
+    
+    if np.iinfo(np.int8).min <= minimo and maximo <= np.iinfo(np.int8).max:
+        imdb_merged[coluna] = imdb_merged[coluna].astype("int8")
+    elif np.iinfo(np.int16).min <= minimo and maximo <= np.iinfo(np.int16).max:
+        imdb_merged[coluna] = imdb_merged[coluna].astype("int16")
+    elif np.iinfo(np.int32).min <= minimo and maximo <= np.iinfo(np.int32).max:
+        imdb_merged[coluna] = imdb_merged[coluna].astype("int32")
+
+#print(imdb_merged.info())
+
+
+#----- Handle missing values -------------- IN PROGRESS
 
 missing_values_list = [(col, int(imdb_merged[col].isnull().sum())) for col in imdb_merged.columns]
 
@@ -73,8 +103,9 @@ missing_values_list = [(col, int(imdb_merged[col].isnull().sum())) for col in im
 
 
 
+
 #----- TO DO -------------------------------
 #----- Handle missing values
-#----- Handle data types
 #----- Basic statistic
-#----- Save plots as images automatically and upload to GitHub
+#----- ERROR: RuntimeWarning: overflow encountered in cast
+
