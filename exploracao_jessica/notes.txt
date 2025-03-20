@@ -13,7 +13,7 @@ director: 87
 writer: 1572
 production_company: 4455
 actors: 69
-description: 2115 ------> remove
+description: 2115
 avg_vote: 0
 votes: 0
 reviews_from_users: 7597

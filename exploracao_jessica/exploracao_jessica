@@ -5,7 +5,7 @@
 # -> Data cleaning and preprocessing (handling missing values, data transformations).
 
 
-#----- Importing libraries
+#----- Importing libraries ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 import numpy as np # array-processing package
 import pandas as pd # data analysis toolkit
@@ -14,33 +14,36 @@ import seaborn as sns # data visualization library
 import re # regular expressions
 
 
-#----- Loading the datasets
+#----- Loading the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # Note: the datasets were saved as CSV UTF-8 files; sep or delimiter
 imdb_movies = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/datasets/imdb_movies.csv', encoding = 'UTF-8', sep = ';') 
 imdb_ratings = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/datasets/imdb_ratings.csv', encoding = 'UTF-8', sep = ';')
 
+
 # Note: .head() doesn't print automatically in the terminal, unless we use e.g. Jupiter Notebook
 #print(imdb_movies.head())
 #print(imdb_ratings.head())
+
 
 #imdb_movies.info()
 #print('-----------------------------------')
 #imdb_ratings.info()
 
 
-#----- Merging the datasets
+#----- Merging the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # Note: inner join returns matching values in both tables
 imdb_merged = pd.merge(imdb_movies, imdb_ratings, how = "inner", on = "imdb_title_id")
 #print(imdb_merged.head())
 #print(imdb_merged.info()) 
 
+
 #print(f"Colunas: {list(imdb_merged.columns)}")
 #print(len(imdb_merged.columns))
 
 
-#----- Missing values
+#----- Missing values ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 missing = imdb_merged.isnull().sum()
 #print(missing)
@@ -52,40 +55,47 @@ missing_table = pd.DataFrame({'Columns': missing.index, 'Missing values': missin
 #print(missing_table)
 
 
-#----- Dropping columns
+#----- Dropping columns ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 size = len(imdb_merged)
 
-# Note: inplace = True modifies the original DataFrame; 10 columns were dropped
+
+# Note: inplace = True modifies the original DataFrame
 for column in imdb_merged.columns:
     if imdb_merged[column].isnull().sum() > 0.5*size:
         imdb_merged.drop(columns = [column], inplace = True)
+
+
+# Remove columns that are not useful
+imdb_merged.drop(columns = ["production_company", "year"], inplace = True) # date_published has more information and less missing values
+
 
 #print(f"Colunas restantes: {list(imdb_merged.columns)}")
 #print(len(imdb_merged.columns))
 
 
-#----- Handle missing values
+#----- Handle missing values ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # Filter columns that still have missing values after dropping some columns
-remaining_missing = missing[missing > 0]
+remaining_missing = imdb_merged.isnull().sum()
+remaining_missing = remaining_missing[remaining_missing > 0]
+
 
 remaining_missing_table = pd.DataFrame({'Columns': remaining_missing.index, 'Missing values': remaining_missing.values})
 #print(remaining_missing_table)
 
-# Remove columns that are not useful
-imdb_merged = imdb_merged.drop(['production_company'], axis = 1)
-imdb_merged = imdb_merged.drop(['year'], axis = 1) # date_published has more information and less missing values
 
 # Numeric (float and int) columns with missing values
 # Note: .iloc[0] returns the first mode in case there are more than one; fillna() replaces missing values 
 numeric = imdb_merged.select_dtypes(include = ['number']).columns 
 imdb_merged[numeric] = imdb_merged[numeric].fillna(imdb_merged[numeric].mode().iloc[0])
 
+
 # Complement country and language 
 # Note: agg() applies a function to the group; lambda is an anonymous function; empty checks if the mode is empty
 country_mode_per_language = imdb_merged.groupby("language")["country"].agg(lambda x: x.mode()[0] if not x.mode().empty else "NA")
 language_mode_per_country = imdb_merged.groupby("country")["language"].agg(lambda x: x.mode()[0] if not x.mode().empty else "NA")
+
 
 # Fill country with the mode of language
 # Note: .map() maps values of series according to input correspondence
@@ -95,11 +105,29 @@ imdb_merged.loc[imdb_merged["language"].isna(), "language"] = imdb_merged["count
 # Fill the remaining missing values with NA
 imdb_merged.fillna({"country": "NA", "language": "NA"}, inplace = True)
 
+
+# Handle date_published - Inês
+# Check if the date_published column is in the format dd-mm-yyyy
+def transform_date_format(x):
+
+    if isinstance(x, str):
+
+        if re.match(r'^\d{4}-\d{2}-\d{2}$', x): # if the date is in the format yyyy-mm-dd
+            date = pd.to_datetime(x)
+            return date.strftime('%d-%m-%Y')
+
+        elif re.match(r'^\d{4}$', x):  # if the date is only the year
+            return f"01-01-{x}"  # return a date with day 01 and month 01: here it can become random if we want, but it is not relevant
+
+    return x # if the date is already in the format dd-mm-yyyy
+
+
+imdb_merged['date_published'] = imdb_merged['date_published'].apply(transform_date_format)
+
 #print(imdb_merged.info())
 
 
-#----- Handle data types - Miguel
-
+#----- Handle data types - Miguel ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # Note: optimization of the data types reduces memory usage and improves processing speed while preserving the necessary precision
 
@@ -144,4 +172,10 @@ for coluna in imdb_merged.select_dtypes(include = ["int64"]).columns:
 # Algorithm Selection & Literature Review
 
 # -> Implement a very basic version of the chosen algorithm (e.g., User-Based Collaborative Filtering using cosine similarity).
+
+
+
+# DUVIDA
+# devo colocar NA nos restantes missing values ou não é necessário?
+# penso que não consigo preencher mais nenhuma informação, tal como fiz com country e language
 
