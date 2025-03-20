@@ -1,4 +1,5 @@
-# Week 2: Data Exploration & Preprocessing
+############################################################################################################################################################################
+# Data Exploration & Preprocessing
 
 # -> Initial visualization of data using Matplotlib/Seaborn
 
@@ -9,7 +10,6 @@ import numpy as np # array-processing package
 import pandas as pd # data analysis toolkit
 import matplotlib.pyplot as plt # static, animated and interactive visualizations
 import seaborn as sns # data visualization library
-import pprint # data pretty printer
 
 
 #----- Loading the datasets
