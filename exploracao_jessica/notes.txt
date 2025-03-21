@@ -1,4 +1,5 @@
-""" 
+# COLUNAS E OS SEUS MISSING VALUES 
+
 imdb_title_id: 0
 title (english): 0
 original_title (original language): 0
@@ -12,7 +13,7 @@ director: 87
 writer: 1572
 production_company: 4455
 actors: 69
-description: 2115 ------> remove
+description: 2115
 avg_vote: 0
 votes: 0
 reviews_from_users: 7597
@@ -53,3 +54,46 @@ us_voters_votes: 209
 non_us_voters_rating: 1
 non_us_voters_votes: 1 
 """
+
+
+# COLUNAS E OS SEUS MISSING VALUES - APÓS LIMPEZA DE COLUNAS E MISSING VALUES > 0
+
+                      Columns  Missing values
+0                        year               1
+1                     country              64
+2                    language             901
+3                    director              87
+4                      writer            1572
+5          production_company            4455
+6                      actors              69
+7                 description            2115
+8          reviews_from_users            7597
+9        reviews_from_critics           11797
+10  allgenders_18age_avg_vote             706
+11     allgenders_18age_votes             706
+12  allgenders_30age_avg_vote              10
+13     allgenders_30age_votes              10
+14  allgenders_45age_avg_vote              80
+15     allgenders_45age_votes              80
+16     males_allages_avg_vote               1
+17        males_allages_votes               1
+18       males_18age_avg_vote            1465
+19          males_18age_votes            1465
+20       males_30age_avg_vote              12
+21          males_30age_votes              12
+22       males_45age_avg_vote             101
+23          males_45age_votes             101
+24   females_allages_avg_vote              81
+25      females_allages_votes              81
+26     females_18age_avg_vote            6521
+27        females_18age_votes            6521
+28     females_30age_avg_vote             944
+29        females_30age_votes             944
+30     females_45age_avg_vote            2798
+31        females_45age_votes            2798
+32      top1000_voters_rating             679
+33       top1000_voters_votes             679
+34           us_voters_rating             209
+35            us_voters_votes             209
+36       non_us_voters_rating               1
+37        non_us_voters_votes               1
