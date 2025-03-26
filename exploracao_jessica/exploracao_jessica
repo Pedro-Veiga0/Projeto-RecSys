@@ -183,30 +183,31 @@ for coluna in imdb_merged.select_dtypes(include = ["int64"]).columns:
 # For measuring the similarity between two users we can either use pearson correlation or cosine similarity. 
 
 
-'''
-
 # Select relevant columns
-movies = df[['imdb_title_id', 'title']]
+movies = imdb_merged[['imdb_title_id', 'title', 'mean_vote', 'total_votes']]
 
-# Generate dummy users
-num_users = 100  # Define the number of dummy users
+# Number of dummy users
+# Note: use a small number, otherwise it will take too long to run the code
+num_users = 10 
 user_ids = [f'user_{i}' for i in range(1, num_users + 1)]
 
-# Generate random ratings (between 1 and 10) for each user and movie
+# Generate user ratings based on existing vote data
 ratings = []
+
 for user in user_ids:
     for _, row in movies.iterrows():
-        if np.random.rand() < 0.3:  # 30% chance a user rates a movie
-            ratings.append([user, row['imdb_title_id'], np.random.randint(1, 11)])
+        # Probability of rating a movie is proportional to the total number of votes
+        if np.random.rand() < min(1, row['total_votes'] / 100000): # normalized probability
+            # Assign a rating close to the mean_vote with small variation
+            rating = np.clip(np.random.normal(row['mean_vote'], 1), 1, 10) # normal distribution around mean_vote
+            ratings.append([user, row['imdb_title_id'], round(rating)])
 
-# Create a DataFrame with the dummy ratings
+# Create a dataframe with the dummy ratings
 ratings_df = pd.DataFrame(ratings, columns=['user_id', 'imdb_title_id', 'rating'])
 
-# Save to CSV
-ratings_df.to_csv("dummy_ratings.csv", index=False)
+ratings_df.to_csv("dummy_ratings.csv", index = False)
+print("Dummy ratings saved to 'dummy_ratings.csv'")
 
-print("Dummy ratings generated and saved to 'dummy_ratings.csv'")
-'''
 
 
 #----- Item-Based Collaborative Filtering ----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -288,7 +289,7 @@ print(recommendations)
 # Note: it takes too long to run the code here
 # Note: use google colab to run the code
 
-### TAREFA
+### TAREFA ######################################################
 ### no colab ainda dá o problema de espaço de memória - resolver !
 
 
