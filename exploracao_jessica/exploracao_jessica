@@ -12,6 +12,9 @@ import pandas as pd # data analysis toolkit
 import matplotlib.pyplot as plt # static, animated and interactive visualizations
 import seaborn as sns # data visualization library
 import re # regular expressions
+from sklearn.metrics.pairwise import cosine_similarity # computes cosine similarity between samples
+from sklearn.preprocessing import StandardScaler # standardizes features by removing the mean and scaling to unit variance
+from scipy.sparse import csr_matrix # sparse matrix package for numeric data
 
 
 #----- Loading the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -174,8 +177,121 @@ for coluna in imdb_merged.select_dtypes(include = ["int64"]).columns:
 # -> Implement a very basic version of the chosen algorithm (e.g., User-Based Collaborative Filtering using cosine similarity).
 
 
+#----- User-Based Collaborative Filtering ----------------------------------------------------------------------------------------------------------------------------------------------------
 
-# DUVIDA
-# devo colocar NA nos restantes missing values ou não é necessário?
-# penso que não consigo preencher mais nenhuma informação, tal como fiz com country e language
+# User based filtering- recommend products to a user that similar users have liked. 
+# For measuring the similarity between two users we can either use pearson correlation or cosine similarity. 
+
+
+'''
+
+# Select relevant columns
+movies = df[['imdb_title_id', 'title']]
+
+# Generate dummy users
+num_users = 100  # Define the number of dummy users
+user_ids = [f'user_{i}' for i in range(1, num_users + 1)]
+
+# Generate random ratings (between 1 and 10) for each user and movie
+ratings = []
+for user in user_ids:
+    for _, row in movies.iterrows():
+        if np.random.rand() < 0.3:  # 30% chance a user rates a movie
+            ratings.append([user, row['imdb_title_id'], np.random.randint(1, 11)])
+
+# Create a DataFrame with the dummy ratings
+ratings_df = pd.DataFrame(ratings, columns=['user_id', 'imdb_title_id', 'rating'])
+
+# Save to CSV
+ratings_df.to_csv("dummy_ratings.csv", index=False)
+
+print("Dummy ratings generated and saved to 'dummy_ratings.csv'")
+'''
+
+
+#----- Item-Based Collaborative Filtering ----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# Item Based Collaborative Filtering - recommends items based on similarity with the items that the target user rated. 
+# The similarity can be computed with Pearson Correlation or Cosine Similarity. 
+
+
+'''
+# Select relevant columns
+ratings = imdb_merged[['title', 'avg_vote']]
+
+# Pivot table: each movie as a row, avg_vote as features
+movie_ratings = ratings.pivot_table(index = 'title', values = 'avg_vote')
+
+# Normalize the ratings
+scaler = StandardScaler()
+movie_ratings_scaled = scaler.fit_transform(movie_ratings)
+
+# Convert to sparse matrix to save memory
+movie_ratings_sparse = csr_matrix(movie_ratings_scaled)
+
+# Split dataset using indices
+num_splits = 4
+index_chunks = np.array_split(movie_ratings.index, num_splits)
+
+# Compute similarity in chunks and store results in a dictionary
+similarity_dict = {}
+
+for i in range(num_splits):
+    for j in range(num_splits):
+        # Extract submatrices from the sparse matrix
+        rows = list(index_chunks[i])
+        cols = list(index_chunks[j])
+        
+        movie_chunk_i = movie_ratings_sparse[movie_ratings.index.isin(rows)]
+        movie_chunk_j = movie_ratings_sparse[movie_ratings.index.isin(cols)]
+        
+        # Compute cosine similarity for the chunk
+        sim_chunk = cosine_similarity(movie_chunk_i, movie_chunk_j)
+        similarity_dict[(i, j)] = sim_chunk
+
+# Recommend 'n' most similar movies to a given movie title based on similarity chunks
+def recommend_movies(movie_title, n = 5):
+    
+    if movie_title not in movie_ratings.index:
+        return f"Movie {movie_title} not found."
+
+    # Identify the chunk containing the movie
+    row_chunk_idx, row_idx_in_chunk = None, None
+
+    for i, index_chunk in enumerate(index_chunks):
+        if movie_title in index_chunk:
+            row_chunk_idx = i
+            row_idx_in_chunk = list(index_chunk).index(movie_title)
+            break  # exit loop once found
+
+    if row_chunk_idx is None or row_idx_in_chunk is None:
+        return f"Movie {movie_title} not found in any chunk."
+
+    # Collect similarities from all chunks
+    similarities = np.hstack([similarity_dict[(row_chunk_idx, j)][row_idx_in_chunk] for j in range(num_splits)])
+
+    # Get top 'n' similar movies (excluding self)
+    sorted_indices = np.argsort(similarities)[::-1][1:n+1] 
+
+    # Retrieve recommended movies
+    recommended_movie_ids = movie_ratings.index[sorted_indices]
+    return imdb_merged[imdb_merged['title'].isin(recommended_movie_ids)][['title', 'description', 'avg_vote']]
+
+
+# Tryout
+movie_example = 'Fast and Furious'  
+recommendations = recommend_movies(movie_example, n = 5)
+print(recommendations)
+'''
+
+# Note: it takes too long to run the code here
+# Note: use google colab to run the code
+
+### TAREFA
+### no colab ainda dá o problema de espaço de memória - resolver !
+
+
+#----- Matrix Factorization ----------------------------------------------------------------------------------------------------------------------------------------------------
+
 
