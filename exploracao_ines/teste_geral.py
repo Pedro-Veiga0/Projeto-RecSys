@@ -233,7 +233,7 @@ def processar_coluna(df, coluna):
     todos_os_valores = df[coluna].dropna().str.split(', ').explode() # aqui remove os missing values
     # separa os valores de cada linha por vírgulas e coloca-os em linhas diferentes
     lista_unica = sorted(todos_os_valores.unique().tolist())  # Lista ordenada dos valores que existem
-    contagem = Counter(todos_os_valores)  # Freqência de cada valor
+    contagem = Counter(todos_os_valores)  # Frequência de cada valor
     mais_comuns = contagem.most_common(3)  # 3 mais comuns
     return lista_unica, mais_comuns
 
@@ -241,12 +241,12 @@ def processar_coluna(df, coluna):
 for coluna in colunas_a_processar:
     listas_unicas[coluna], mais_comuns[coluna] = processar_coluna(df, coluna)
 
-"""
-for coluna in colunas_a_processar:
+
+""" for coluna in colunas_a_processar:
     print(f"\nColuna: {coluna}")
     print(f"Valores únicos ordenados: {listas_unicas[coluna]}")
     print(f"Top 3 mais comuns: {mais_comuns[coluna]}")
-"""
+ """
 
 # para analisar cada coluna mais vale comentar as restantes no colunas_a_processar, porque o
 # output é enorme; na lista dos países tem valores meio estranhos; nas colunas
@@ -262,7 +262,7 @@ for coluna in colunas_a_processar:
 
 graph_year_2009 = df['year'].value_counts().sort_index(ascending = True).head(10).plot(kind = 'bar', color = 'purple')
 
-graph_year_2009.set_title('Movies released since 2009', color = 'purple', fontweight = 'bold')
+graph_year_2009.set_title('Movies released until 1918', color = 'purple', fontweight = 'bold')
 graph_year_2009.set_xlabel('Year', color = 'purple')
 graph_year_2009.set_ylabel('Number of Movies Launched', color = 'purple')
 graph_year_2009.set_facecolor('lavender') # altera a cor dos quadradinhos por trás do gráfico
@@ -270,20 +270,20 @@ graph_year_2009.set_facecolor('lavender') # altera a cor dos quadradinhos por tr
 
 plt.gcf().set_facecolor('lavender')  # Altera a cor do fundo do gráfico em volta dos quadradinhos
 
-#plt.show()
+plt.show()
 
 graph_year_1923 = df['year'].value_counts().sort_index(ascending = True).tail(10).plot(kind = 'bar', color = 'purple')
 
-graph_year_1923.set_title('Movies released until 1923', color = 'purple', fontweight = 'bold')
+graph_year_1923.set_title('Movies since 2011', color = 'purple', fontweight = 'bold')
 graph_year_1923.set_xlabel('Year', color = 'purple')
 graph_year_1923.set_ylabel('Number of Movies Launched', color = 'purple')
 graph_year_1923.set_facecolor('lavender') 
 
 plt.gcf().set_facecolor('lavender')  
 
-#plt.show()
+plt.show()
 
-graph_year = df['year'].value_counts().sort_index().plot(kind='line', marker='o', color = 'purple')
+graph_year = df['year'].value_counts().sort_index().plot(kind = 'line', marker = 'o', color = 'purple')
 
 graph_year.set_title('Movies released', color = 'purple', fontweight = 'bold')
 graph_year.set_xlabel('Year', color = 'purple')
@@ -292,7 +292,7 @@ graph_year.set_facecolor('lavender') # altera a cor dos quadradinhos por trás d
 
 plt.gcf().set_facecolor('lavender')  
 
-#plt.show()
+plt.show()
 
 
 
@@ -324,7 +324,7 @@ plt.legend(['18-30 years', '30-45 years', '45+ years'], title = "Age Group")
 plt.gca().set_facecolor('paleturquoise')  # Cor dos quadrados do gráfico
 plt.gcf().set_facecolor('paleturquoise')
 
-#plt.show()
+plt.show()
 
 # tokenize text data - to work with text data, tokenization is required
 # tokenazation is a way of breaking down the text into smaller units called 
@@ -385,7 +385,7 @@ print(f"Número de filmes após agrupamento: {len(df_representative)}")
 selected_columns = ['title', 'genre', 'director', 'actors', 'description'] # columns we will use
 df_selected = df[selected_columns].astype(str)  # convert them to string and fill NaN
 
-df_selected['combined_features'] = df_selected.apply(lambda x: ' '.join(x), axis=1) # create combined_features column before saving
+df_selected['combined_features'] = df_selected.apply(lambda x: ' '.join(x), axis = 1) # create combined_features column before saving
 
 # first 10000 rows
 df_selected[:10000].to_csv('movies_cleaned.csv', sep = ';', index = False, encoding = 'ISO-8859-1')
@@ -420,6 +420,5 @@ def recommend_movies(movie_title, num_recommendations = 5): # 'movie_title' the 
     recommended_movies = [df_movies_cleaned.iloc[i[0]]['title'] for i in similarity_scores]
     return recommended_movies
 
-# Exemplo de uso
-print(recommend_movies("Miss Jerry", 5))
 
+print(recommend_movies("Miss Jerry", 5))
