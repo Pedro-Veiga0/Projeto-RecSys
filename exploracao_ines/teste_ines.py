@@ -6,6 +6,9 @@ import seaborn as sns
 from datetime import date, datetime
 import re
 from collections import Counter
+from sklearn.feature_extraction.text import TfidfVectorizer # for text data tokenization
+from sklearn.metrics.pairwise import cosine_similarity 
+from sklearn.metrics.pairwise import linear_kernel # for similarity calculation
 plt.style.use('ggplot') # estilo dos gráficos
 pd.set_option('display.max_columns', 200) # quantidade de colunas que aparecem do nosso dataset
 
@@ -45,7 +48,7 @@ df = datajoin[[#'imdb_title_id',
         #'original_title',
         'year', 'date_published', 'genre', 'duration', 
         'country', 'language', 'director', 'writer', 'production_company', 'actors', 
-        #'description', 
+        'description', 
         'avg_vote', 'votes',       
         #'budget', 'usa_gross_income', 'worlwide_gross_income', 'metascore',       
         #'reviews_from_users', 'reviews_from_critics', 
@@ -267,7 +270,7 @@ graph_year_2009.set_facecolor('lavender') # altera a cor dos quadradinhos por tr
 
 plt.gcf().set_facecolor('lavender')  # Altera a cor do fundo do gráfico em volta dos quadradinhos
 
-plt.show()
+#plt.show()
 
 graph_year_1923 = df['year'].value_counts().sort_index(ascending = True).tail(10).plot(kind = 'bar', color = 'purple')
 
@@ -278,7 +281,7 @@ graph_year_1923.set_facecolor('lavender')
 
 plt.gcf().set_facecolor('lavender')  
 
-plt.show()
+#plt.show()
 
 graph_year = df['year'].value_counts().sort_index().plot(kind='line', marker='o', color = 'purple')
 
@@ -289,7 +292,7 @@ graph_year.set_facecolor('lavender') # altera a cor dos quadradinhos por trás d
 
 plt.gcf().set_facecolor('lavender')  
 
-plt.show()
+#plt.show()
 
 
 
@@ -321,5 +324,101 @@ plt.legend(['18-30 years', '30-45 years', '45+ years'], title = "Age Group")
 plt.gca().set_facecolor('paleturquoise')  # Cor dos quadrados do gráfico
 plt.gcf().set_facecolor('paleturquoise')
 
-plt.show()
+#plt.show()
 
+# tokenize text data - to work with text data, tokenization is required
+# tokenazation is a way of breaking down the text into smaller units called 
+# tokens. In this example a token is a word. TDIDF is used to tokenized
+# description column. TF-IDF (Term Frequency - Inverse Document Frequency) 
+# measures how relevant a word is to a document in a collection of documents.abs
+
+
+"""
+# CONTENT-BASED FILTERING:
+selected_columns = ['title', 'genre', 'director', 'actors', 'description'] # columns we will use
+df_selected = df[selected_columns].astype(str)  # convert them to string and fill NaN
+
+# Concatenar os textos relevantes para cada filme
+df_selected['combined_text'] = df_selected.apply(lambda x: ' '.join(x), axis=1)
+
+# Text Vectorization (TF-IDF)
+vectorizer = TfidfVectorizer(stop_words = 'english', max_features = 5000) # evaluates the importance of word in a dataset
+X = vectorizer.fit_transform(df_selected['combined_text'])
+
+# Aplicar K-Means com 10.000 clusters
+num_clusters = 10000
+kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init=10)
+df_selected['cluster'] = kmeans.fit_predict(X) 
+
+# Em execução (1 h 8 min 37 s)  
+<cell line: 0>
+navigate_next
+fit_predict()
+navigate_next
+wrapper()
+navigate_next
+fit()
+navigate_next
+wrapper()
+navigate_next
+_kmeans_single_lloyd()
+
+# Escolher um filme representativo por cluster (o mais próximo do centro)
+cluster_centers = kmeans.cluster_centers_
+closest_points = []
+for cluster in range(num_clusters):
+    cluster_indices = np.where(df_selected['cluster'] == cluster)[0]
+    cluster_vectors = X[cluster_indices].toarray()
+    center = cluster_centers[cluster]
+    distances = np.linalg.norm(cluster_vectors - center, axis=1)
+    closest_index = cluster_indices[np.argmin(distances)]
+    closest_points.append(closest_index)
+
+# Criar o novo DataFrame apenas com os filmes representativos
+df_representative = df.iloc[closest_points]
+
+# Mostrar o novo número de linhas
+print(f"Número de filmes após agrupamento: {len(df_representative)}")
+"""
+
+# CONTENT-BASED FILTERING:
+selected_columns = ['title', 'genre', 'director', 'actors', 'description'] # columns we will use
+df_selected = df[selected_columns].astype(str)  # convert them to string and fill NaN
+
+df_selected['combined_features'] = df_selected.apply(lambda x: ' '.join(x), axis=1) # create combined_features column before saving
+
+# first 10000 rows
+df_selected[:10000].to_csv('movies_cleaned.csv', sep = ';', index = False, encoding = 'ISO-8859-1')
+
+# Read the saved data back into a DataFrame
+df_movies_cleaned = pd.read_csv('movies_cleaned.csv', sep = ';', encoding = 'ISO-8859-1') 
+
+# Text Vectorization (TF-IDF)
+vectorizer = TfidfVectorizer(stop_words = 'english')  # removes unnecessary words
+feature_vectors = vectorizer.fit_transform(df_movies_cleaned['combined_features']) # text to numeric
+
+# cosine similarity
+similarity_matrix = cosine_similarity(feature_vectors)
+
+# function to recommend the movies
+def recommend_movies(movie_title, num_recommendations = 5): # 'movie_title' the movie for wich we want to find similar movies
+    
+    # checking if the movie exists
+    if movie_title not in df_movies_cleaned['title'].values:
+        return "Filme não encontrado. Tenta outro título."
+
+    # finds the index of the movie in the by filtering df_movies_cleaned to get the row where the title matches the movie_title
+    movie_index = df_movies_cleaned[df_movies_cleaned['title'] == movie_title].index[0]
+    
+    # sorts the list of similarity scores in descending order based on the similarity value - ensures that the most similar 
+    # movies come first
+    similarity_scores = list(enumerate(similarity_matrix[movie_index]))
+
+    # [1:num_recommendations + 1] excludes the first item in the sorted list (the movie itself)
+    similarity_scores = sorted(similarity_scores, key = lambda x: x[1], reverse = True)[1:num_recommendations+1]
+    
+    recommended_movies = [df_movies_cleaned.iloc[i[0]]['title'] for i in similarity_scores]
+    return recommended_movies
+
+# Exemplo de uso
+print(recommend_movies("Miss Jerry", 5))
