@@ -45,7 +45,7 @@ datajoin = pd.concat([dataset_movies, dataset_ratings], axis = 1)
 # RETIRAR COLUNAS DESNECESSÁRIAS PARA O CASO DE ESTUDO
 df = datajoin[[#'imdb_title_id', 
         'title', 
-        #'original_title',
+        'original_title',
         'year', 'date_published', 'genre', 'duration', 
         'country', 'language', 'director', 'writer', 'production_company', 'actors', 
         'description', 
@@ -382,7 +382,7 @@ print(f"Número de filmes após agrupamento: {len(df_representative)}")
 """
 
 # CONTENT-BASED FILTERING:
-selected_columns = ['title', 'genre', 'director', 'actors', 'description'] # columns we will use
+selected_columns = ['original_title', 'genre', 'director', 'actors', 'description'] # columns we will use
 df_selected = df[selected_columns].astype(str)  # convert them to string and fill NaN
 
 df_selected['combined_features'] = df_selected.apply(lambda x: ' '.join(x), axis = 1) # create combined_features column before saving
@@ -404,11 +404,11 @@ similarity_matrix = cosine_similarity(feature_vectors)
 def recommend_movies(movie_title, num_recommendations = 5): # 'movie_title' the movie for wich we want to find similar movies
     
     # checking if the movie exists
-    if movie_title not in df_movies_cleaned['title'].values:
+    if movie_title not in df_movies_cleaned['original_title'].values:
         return "Filme não encontrado. Tenta outro título."
 
     # finds the index of the movie in the by filtering df_movies_cleaned to get the row where the title matches the movie_title
-    movie_index = df_movies_cleaned[df_movies_cleaned['title'] == movie_title].index[0]
+    movie_index = df_movies_cleaned[df_movies_cleaned['original_title'] == movie_title].index[0]
     
     # sorts the list of similarity scores in descending order based on the similarity value - ensures that the most similar 
     # movies come first
@@ -417,7 +417,7 @@ def recommend_movies(movie_title, num_recommendations = 5): # 'movie_title' the 
     # [1:num_recommendations + 1] excludes the first item in the sorted list (the movie itself)
     similarity_scores = sorted(similarity_scores, key = lambda x: x[1], reverse = True)[1:num_recommendations+1]
     
-    recommended_movies = [df_movies_cleaned.iloc[i[0]]['title'] for i in similarity_scores]
+    recommended_movies = [df_movies_cleaned.iloc[i[0]]['original_title'] for i in similarity_scores]
     return recommended_movies
 
 
