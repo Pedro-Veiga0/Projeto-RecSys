@@ -1,0 +1,17 @@
+import numpy as np # array-processing package
+import pandas as pd # data analysis toolkit
+import matplotlib.pyplot as plt # static, animated and interactive visualizations
+import seaborn as sns # data visualization library
+import re # regular expressions
+from sklearn.metrics.pairwise import cosine_similarity # computes cosine similarity between samples
+from sklearn.preprocessing import StandardScaler # standardizes features by removing the mean and scaling to unit variance
+from scipy.sparse import csr_matrix # sparse matrix package for numeric data
+
+
+#----- Loading the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Jéssica
+imdb_movies = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/datasets/imdb_movies.csv', encoding = 'UTF-8', sep = ';') 
+imdb_ratings = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/datasets/imdb_ratings.csv', encoding = 'UTF-8', sep = ';')
+
+
