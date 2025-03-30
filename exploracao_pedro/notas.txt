@@ -1,4 +1,0 @@
-1º normalizar ratings e one-hot encoding no movies
-2º Criar rating matrix
-3º medir similaridade, coseno euclidean produto interno
-4º escolher função objetivo da MF, seja apenas observada, wheightted ou SVD
