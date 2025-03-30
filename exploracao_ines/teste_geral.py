@@ -1,0 +1,424 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pylab as plt
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import date, datetime
+import re
+from collections import Counter
+from sklearn.feature_extraction.text import TfidfVectorizer # for text data tokenization
+from sklearn.metrics.pairwise import cosine_similarity 
+from sklearn.metrics.pairwise import linear_kernel # for similarity calculation
+plt.style.use('ggplot') # estilo dos gráficos
+pd.set_option('display.max_columns', 200) # quantidade de colunas que aparecem do nosso dataset
+
+dataset_movies = pd.read_csv(r'C:\Users\BasilioCosta\Desktop\ines_ambiente_trabalho\mestrado\projeto_integrado\repositorio\Projeto-RecSys-1\exploracao_ines\movies.csv', sep = ';', encoding = 'ISO-8859-1') 
+# coloquei encoding='ISO-8859-1' porque existem caracteres especiais no dataset que impedem que ele corra em UTF-8
+
+dataset_ratings = pd.read_csv(r'C:\Users\BasilioCosta\Desktop\ines_ambiente_trabalho\mestrado\projeto_integrado\repositorio\Projeto-RecSys-1\exploracao_ines\ratings.csv', sep = ';') 
+# este já não precisou de um encoding diferente, porque é um dataset numérico
+
+datajoin = pd.concat([dataset_movies, dataset_ratings], axis = 1)
+
+""" for col in datajoin.columns: # aqui confirmamos que a juncao dos datasets funcionou bem
+    print(list(col))  """ 
+
+# shift + alt + A faz o tipo de comentário acima
+
+
+
+
+# ANÁLISE DO DATASET
+
+#print(datajoin.shape) # temos inicialmente 85855 linhas e 71 colunas
+#print(datajoin.head(20)) # 20 primeiras linhas do dataset
+# como o pd por defeito não nos deixa ver as colunas todas e estamos a obter "imdb_title_id  ... non_us_voters_votes",
+# então ativamos a condicao das linhas iniciais: pd.set_option('display.max_columns', 200)
+#print(datajoin.columns) # nome das colunas 
+#print(datajoin.dtypes) # tipo de variáveis de cada coluna
+
+#print(datajoin.describe) # similar aos outros
+
+
+
+
+# RETIRAR COLUNAS DESNECESSÁRIAS PARA O CASO DE ESTUDO
+df = datajoin[[#'imdb_title_id', 
+        'title', 
+        'original_title',
+        'year', 'date_published', 'genre', 'duration', 
+        'country', 'language', 'director', 'writer', 'production_company', 'actors', 
+        'description', 
+        'avg_vote', 'votes',       
+        #'budget', 'usa_gross_income', 'worlwide_gross_income', 'metascore',       
+        #'reviews_from_users', 'reviews_from_critics', 
+        #'imdb_title_id',
+        'weighted_average_vote', 'total_votes', 'mean_vote', 'median_vote',       
+        'votes_10', 'votes_9', 'votes_8', 'votes_7', 'votes_6', 'votes_5',        
+        'votes_4', 'votes_3', 'votes_2', 'votes_1', 
+        #'allgenders_0age_avg_vote', 'allgenders_0age_votes', 
+        'allgenders_18age_avg_vote',
+        'allgenders_18age_votes', 'allgenders_30age_avg_vote',
+        'allgenders_30age_votes', 'allgenders_45age_avg_vote',
+        'allgenders_45age_votes', 'males_allages_avg_vote',
+        'males_allages_votes', 
+        #'males_0age_avg_vote', 'males_0age_votes',
+        'males_18age_avg_vote', 'males_18age_votes', 'males_30age_avg_vote',      
+        'males_30age_votes', 'males_45age_avg_vote', 'males_45age_votes',
+        'females_allages_avg_vote', 'females_allages_votes',
+        #'females_0age_avg_vote', 'females_0age_votes', 
+        'females_18age_avg_vote', 'females_18age_votes', 'females_30age_avg_vote', 'females_30age_votes',   
+        'females_45age_avg_vote', 'females_45age_votes',
+        'top1000_voters_rating', 'top1000_voters_votes', 'us_voters_rating',      
+        'us_voters_votes', 'non_us_voters_rating', 'non_us_voters_votes']]
+
+# retirei as colunas que não faziam sentido para o estudo que vamos fazer ou repetidas
+# (provavelmente ainda vale a pena tirar mais) - mantive assim para ter nocao do que foi
+# retirado
+
+
+
+
+# RENOMEAR AS COLUNAS
+df = df.rename(columns = {'allgenders_18age_avg_vote' : 'allgenders_18_to_30_avg_vote',
+        'allgenders_18age_votes' : 'allgenders_18_to_30_votes', 
+        'allgenders_30age_avg_vote' : 'allgenders_30_to_45_avg_vote',
+        'allgenders_30age_votes' : 'allgenders_30_to_45_votes', 
+        'allgenders_45age_avg_vote' : 'allgenders_45_and_above_avg_vote',
+        'allgenders_45age_votes' : 'allgenders_45_and_above_votes', 
+        'males_18age_avg_vote' : 'males_18_to_30_avg_vote', 
+        'males_18age_votes' : 'males_18_to_30_votes', 
+        'males_30age_avg_vote' : 'males_30_to_45_avg_vote',      
+        'males_30age_votes' : 'males_30_to_45_votes', 
+        'males_45age_avg_vote' : 'males_45_and_above_avg_vote', 
+        'males_45age_votes' : 'males_45_and_above_votes',
+        'females_18age_avg_vote' : 'females_18_to_30_avg_vote', 
+        'females_18age_votes' : 'females_18_to_30_votes', 
+        'females_30age_avg_vote' : 'females_30_to_45_avg_vote', 
+        'females_30age_votes' : 'females_30_to_45_votes',   
+        'females_45age_avg_vote' : 'females_45_and_above_avg_vote', 
+        'females_45age_votes' : 'females_45_and_above_votes'})
+
+
+
+
+# MISSING VALUES:
+
+#print(df.isna().sum()) # aqui sabemos quantos missing values temos em cada coluna
+
+
+
+
+# MISSING VALUES - COLUNA YEAR:
+
+#print(df['year'].isnull().sum()) # existe 1 missing value na coluna 'year'
+ind_missval_year = df[df['year'].isnull()].index[0] # a linha onde está o missing value é a 83917
+
+# o missing value de 'year' pode ser substituído pelo valor da coluna 'date_published:
+valor_date_published = df.at[ind_missval_year, 'date_published']  # Obtém o valor da coluna 'date_published'
+                                                                  # neste índice
+
+# Usamos uma expressão regular para extrair o ano, porque o resultado era TV Movie 2019 e só queremos o 2019
+ano = re.search(r'\b\d{4}\b', valor_date_published)
+
+# Se o ano for encontrado, substituir o valor na coluna 'year'
+if ano:
+    df.at[ind_missval_year, 'year'] = int(ano.group())  # Substitui o valor de 'year' com o ano extraído, ou seja, não
+                                                        # existem mais missing values na coluna 'year'
+
+df = df.astype({'year' : 'int'}) # evita que os números apareçam como floats
+
+
+
+
+# MISSING VALUES - COLUNAS A PREENCHAR:
+
+coluna_inicio = 'avg_vote'  # A partir de onde é para preencher os missing values baseado numa regra
+
+colunas_a_preencher = df.loc[:, coluna_inicio:].columns # pegar em todas as colunas a partir da 'coluna_inicio'
+                                                        # para saber o que temos de preencher
+
+df[colunas_a_preencher] = df[colunas_a_preencher].fillna(df[colunas_a_preencher].mean())
+
+
+# as colunas 'country', 'language', 'director', 'writer', 'production_company', 'actors' ficaram por tratar no que toca
+# a missing values. Penso que este tratamento pode ser feito com base noutras colunas, mas não o fiz, porque honestamente
+# não saberia por onde começar. Talvez o que faça mais sentido é cruzar o país com a língua e caso ambos possuam missing
+# values na mesma linha, então poderíamos pensar quem foi o diretor e tentar descobrir o pais e a língua, mas isso é 
+# subjetivo, porque pode não ter nada a ver. E ainda por cima não podemos inferir o nome do diretor com base no país
+# por haver países que têm nomes parecidos. Sei lá :)
+
+
+
+
+# TRATAMENTO DE DADOS - COLUNA DATE_PUBLISHED:
+
+# Nesta parte decidi trabalhar nas datas da coluna date_published. Tinha algumas datas que estavam invertidas, por exemplo
+# 1894-10-09 e outras que só tinham o ano, por exemplo, 2019. Assim, inverti as que estavam invertidas inicialmente e as que
+# só tinham o ano passaram a ser 01-01-2019
+
+# Função para verificar se a string está no formato dd-mm-yyyy
+def is_valid_date_format(date_str):
+    return bool(re.match(r'^\d{2}-\d{2}-\d{4}$', date_str))
+
+# Função para inverter a data conforme as regras
+def transform_date_format(x):
+
+    # Caso o valor já esteja no formato dd-mm-yyyy
+    if isinstance(x, str) and is_valid_date_format(x):
+        return x  # Não faz nada e mantém o valor como está
+
+    # Caso o valor esteja no formato yyyy-mm-dd
+    elif isinstance(x, str) and re.match(r'^\d{4}-\d{2}-\d{2}$', x):
+        
+        # Converte para o formato dd-mm-yyyy
+        date = pd.to_datetime(x)
+        return date.strftime('%d-%m-%Y')  # Retorna o valor como dd-mm-yyyy
+
+    # Caso o valor seja apenas o ano
+    elif isinstance(x, str) and re.match(r'^\d{4}$', x):
+        return f"01-01-{x}"  # Cria uma data com dia 01 e mês 01 - aqui pode tornar-se aleatório, se quisermos
+
+    return x  # Retorna o valor original caso não caia em nenhum dos casos anteriores, pelo que as que já estavam bem mantém-se
+
+# Aplica a função à coluna 'date_published'
+df['date_published'] = df['date_published'].apply(transform_date_format)
+
+
+
+
+# LINHAS DUPLICADAS - INEXISTENTES:
+
+# apesar de haver muitas linhas com valores que parecem estar duplicados, na realidade, se formos a comparar os valores
+# 'title', 'year' e 'language', percebemos que as linhas apenas parecem estar duplicadas; existem filmes que têm o mesmo 
+# nome mas que foram publicados em anos diferentes ou que estão em línguas diferentes 
+
+#print(df.loc[df.duplicated(subset = ['title', 'year', 'language'])])
+
+
+
+
+# ANÁLISE ESTATÍSTICA DOS DADOS:
+
+# PARA OS DADOS NUMÉRICOS:
+
+coluna_inicio = 'avg_vote'  # A partir de onde é para preencher os missing values baseado numa regra
+
+colunas_a_preencher = df.loc[:, coluna_inicio:].columns # pegar em todas as colunas a partir da 'coluna_inicio'
+                                                        # para saber o que temos de preencher
+
+medias_dict = df[colunas_a_preencher].mean().round(3).to_dict() # medias das colunas numéricas 
+                                                                # arredondadas para 3 casas decimais
+medianas_dict = df[colunas_a_preencher].median().to_dict() # mediana das colunas numéricas 
+
+moda_dict = df[colunas_a_preencher].mode().iloc[0].to_dict() # moda das colunas numéricas
+                                                             # como a moda pode ser mais do que uma
+                                                             # pegamos no primeiro valor mais frequente 
+                                                             # usando .iloc[0]
+
+
+
+
+# PARA OS DADOS DE TEXTO:
+
+colunas_a_processar = ['genre', 'country', 'language', 'director', 'writer', 'production_company', 'actors']
+# achei que estas fizessem mais sentido 
+
+# Armazenar os resultados
+listas_unicas = {}  # Armazena os valores de cada coluna, apenas um de cada
+mais_comuns = {}  # Armazena os 3 mais comuns
+
+# Função para processar cada coluna
+def processar_coluna(df, coluna):
+    todos_os_valores = df[coluna].dropna().str.split(', ').explode() # aqui remove os missing values
+    # separa os valores de cada linha por vírgulas e coloca-os em linhas diferentes
+    lista_unica = sorted(todos_os_valores.unique().tolist())  # Lista ordenada dos valores que existem
+    contagem = Counter(todos_os_valores)  # Frequência de cada valor
+    mais_comuns = contagem.most_common(3)  # 3 mais comuns
+    return lista_unica, mais_comuns
+
+# Aplicar a função a cada coluna e armazenar os resultados
+for coluna in colunas_a_processar:
+    listas_unicas[coluna], mais_comuns[coluna] = processar_coluna(df, coluna)
+
+
+""" for coluna in colunas_a_processar:
+    print(f"\nColuna: {coluna}")
+    print(f"Valores únicos ordenados: {listas_unicas[coluna]}")
+    print(f"Top 3 mais comuns: {mais_comuns[coluna]}")
+ """
+
+# para analisar cada coluna mais vale comentar as restantes no colunas_a_processar, porque o
+# output é enorme; na lista dos países tem valores meio estranhos; nas colunas
+# 'director', 'writer' e 'actors' podem haver valores que não estejam a falar da
+# mesma pessoa porque existem pessoas com o mesmo nome
+
+
+
+
+# ANÁLISE GRÁFICA:
+
+# Coluna year:
+
+graph_year_2009 = df['year'].value_counts().sort_index(ascending = True).head(10).plot(kind = 'bar', color = 'purple')
+
+graph_year_2009.set_title('Movies released until 1918', color = 'purple', fontweight = 'bold')
+graph_year_2009.set_xlabel('Year', color = 'purple')
+graph_year_2009.set_ylabel('Number of Movies Launched', color = 'purple')
+graph_year_2009.set_facecolor('lavender') # altera a cor dos quadradinhos por trás do gráfico
+
+
+plt.gcf().set_facecolor('lavender')  # Altera a cor do fundo do gráfico em volta dos quadradinhos
+
+plt.show()
+
+graph_year_1923 = df['year'].value_counts().sort_index(ascending = True).tail(10).plot(kind = 'bar', color = 'purple')
+
+graph_year_1923.set_title('Movies since 2011', color = 'purple', fontweight = 'bold')
+graph_year_1923.set_xlabel('Year', color = 'purple')
+graph_year_1923.set_ylabel('Number of Movies Launched', color = 'purple')
+graph_year_1923.set_facecolor('lavender') 
+
+plt.gcf().set_facecolor('lavender')  
+
+plt.show()
+
+graph_year = df['year'].value_counts().sort_index().plot(kind = 'line', marker = 'o', color = 'purple')
+
+graph_year.set_title('Movies released', color = 'purple', fontweight = 'bold')
+graph_year.set_xlabel('Year', color = 'purple')
+graph_year.set_ylabel('Number of Movies Launched', color = 'purple')
+graph_year.set_facecolor('lavender') # altera a cor dos quadradinhos por trás do gráfico
+
+plt.gcf().set_facecolor('lavender')  
+
+plt.show()
+
+
+
+
+# GRÁFICO DA MÉDIA DE VOTOS POR FAIXA ETÁRIA EM CADA GÉNERO:
+
+# Criar uma cópia do DataFrame removendo valores nulos e separando os géneros
+df_exploded = df.dropna(subset=['genre']).copy()
+df_exploded['genre'] = df_exploded['genre'].str.split(', ')  # Separar géneros
+df_exploded = df_exploded.explode('genre')  # Explodir para várias linhas
+
+# Somar os votos por género e faixa etária
+votos_por_genero = df_exploded.groupby('genre')[[
+    'allgenders_18_to_30_votes',
+    'allgenders_30_to_45_votes',
+    'allgenders_45_and_above_votes'
+]].sum()
+
+# Criar gráfico de barras empilhadas
+votos_por_genero.plot(kind = 'bar', stacked = True, figsize = (12, 6), colormap = 'viridis')
+
+# Personalizar gráfico
+plt.title('Votes Distribution by Genre and Age Group', fontsize = 14, fontweight = 'bold', color = 'purple')
+plt.xlabel('Genre', color = 'purple')
+plt.ylabel('Total Votes', color = 'purple')
+plt.xticks(rotation = 45)  # Rodar os nomes do eixo dos x para melhor visualização
+plt.legend(['18-30 years', '30-45 years', '45+ years'], title = "Age Group")
+
+plt.gca().set_facecolor('paleturquoise')  # Cor dos quadrados do gráfico
+plt.gcf().set_facecolor('paleturquoise')
+
+plt.show()
+
+# tokenize text data - to work with text data, tokenization is required
+# tokenazation is a way of breaking down the text into smaller units called 
+# tokens. In this example a token is a word. TDIDF is used to tokenized
+# description column. TF-IDF (Term Frequency - Inverse Document Frequency) 
+# measures how relevant a word is to a document in a collection of documents.abs
+
+
+"""
+# CONTENT-BASED FILTERING:
+selected_columns = ['title', 'genre', 'director', 'actors', 'description'] # columns we will use
+df_selected = df[selected_columns].astype(str)  # convert them to string and fill NaN
+
+# Concatenar os textos relevantes para cada filme
+df_selected['combined_text'] = df_selected.apply(lambda x: ' '.join(x), axis=1)
+
+# Text Vectorization (TF-IDF)
+vectorizer = TfidfVectorizer(stop_words = 'english', max_features = 5000) # evaluates the importance of word in a dataset
+X = vectorizer.fit_transform(df_selected['combined_text'])
+
+# Aplicar K-Means com 10.000 clusters
+num_clusters = 10000
+kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init=10)
+df_selected['cluster'] = kmeans.fit_predict(X) 
+
+# Em execução (1 h 8 min 37 s)  
+<cell line: 0>
+navigate_next
+fit_predict()
+navigate_next
+wrapper()
+navigate_next
+fit()
+navigate_next
+wrapper()
+navigate_next
+_kmeans_single_lloyd()
+
+# Escolher um filme representativo por cluster (o mais próximo do centro)
+cluster_centers = kmeans.cluster_centers_
+closest_points = []
+for cluster in range(num_clusters):
+    cluster_indices = np.where(df_selected['cluster'] == cluster)[0]
+    cluster_vectors = X[cluster_indices].toarray()
+    center = cluster_centers[cluster]
+    distances = np.linalg.norm(cluster_vectors - center, axis=1)
+    closest_index = cluster_indices[np.argmin(distances)]
+    closest_points.append(closest_index)
+
+# Criar o novo DataFrame apenas com os filmes representativos
+df_representative = df.iloc[closest_points]
+
+# Mostrar o novo número de linhas
+print(f"Número de filmes após agrupamento: {len(df_representative)}")
+"""
+
+# CONTENT-BASED FILTERING:
+selected_columns = ['original_title', 'genre', 'director', 'actors', 'description'] # columns we will use
+df_selected = df[selected_columns].astype(str)  # convert them to string and fill NaN
+
+df_selected['combined_features'] = df_selected.apply(lambda x: ' '.join(x), axis = 1) # create combined_features column before saving
+
+# first 10000 rows
+df_selected[:10000].to_csv('movies_cleaned.csv', sep = ';', index = False, encoding = 'ISO-8859-1')
+
+# Read the saved data back into a DataFrame
+df_movies_cleaned = pd.read_csv('movies_cleaned.csv', sep = ';', encoding = 'ISO-8859-1') 
+
+# Text Vectorization (TF-IDF)
+vectorizer = TfidfVectorizer(stop_words = 'english')  # removes unnecessary words
+feature_vectors = vectorizer.fit_transform(df_movies_cleaned['combined_features']) # text to numeric
+
+# cosine similarity
+similarity_matrix = cosine_similarity(feature_vectors)
+
+# function to recommend the movies
+def recommend_movies(movie_title, num_recommendations = 5): # 'movie_title' the movie for wich we want to find similar movies
+    
+    # checking if the movie exists
+    if movie_title not in df_movies_cleaned['original_title'].values:
+        return "Filme não encontrado. Tenta outro título."
+
+    # finds the index of the movie in the by filtering df_movies_cleaned to get the row where the title matches the movie_title
+    movie_index = df_movies_cleaned[df_movies_cleaned['original_title'] == movie_title].index[0]
+    
+    # sorts the list of similarity scores in descending order based on the similarity value - ensures that the most similar 
+    # movies come first
+    similarity_scores = list(enumerate(similarity_matrix[movie_index]))
+
+    # [1:num_recommendations + 1] excludes the first item in the sorted list (the movie itself)
+    similarity_scores = sorted(similarity_scores, key = lambda x: x[1], reverse = True)[1:num_recommendations+1]
+    
+    recommended_movies = [df_movies_cleaned.iloc[i[0]]['original_title'] for i in similarity_scores]
+    return recommended_movies
+
+
+print(recommend_movies("Miss Jerry", 5))

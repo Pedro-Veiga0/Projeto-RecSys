@@ -12,6 +12,9 @@ import pandas as pd # data analysis toolkit
 import matplotlib.pyplot as plt # static, animated and interactive visualizations
 import seaborn as sns # data visualization library
 import re # regular expressions
+from sklearn.metrics.pairwise import cosine_similarity # computes cosine similarity between samples
+from sklearn.preprocessing import StandardScaler # standardizes features by removing the mean and scaling to unit variance
+from scipy.sparse import csr_matrix # sparse matrix package for numeric data
 
 
 #----- Loading the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -174,8 +177,182 @@ for coluna in imdb_merged.select_dtypes(include = ["int64"]).columns:
 # -> Implement a very basic version of the chosen algorithm (e.g., User-Based Collaborative Filtering using cosine similarity).
 
 
+#----- User-Based Collaborative Filtering ----------------------------------------------------------------------------------------------------------------------------------------------------
 
-# DUVIDA
-# devo colocar NA nos restantes missing values ou não é necessário?
-# penso que não consigo preencher mais nenhuma informação, tal como fiz com country e language
+# User based filtering- recommend products to a user that similar users have liked. 
+# For measuring the similarity between two users we can either use pearson correlation or cosine similarity. 
+
+
+# Select relevant columns
+movies = imdb_merged[['imdb_title_id', 'title', 'mean_vote', 'total_votes']]
+
+
+# Number of dummy users
+# Note: use a small number, otherwise it will take too long to run the code
+num_users = 10 
+user_ids = [f'user_{i}' for i in range(1, num_users + 1)]
+
+
+# Generate user ratings based on mean_vote and total_votes
+# Note: the ratings are generated randomly, but the probability of rating a movie is proportional to the total number of votes
+ratings = []
+
+# Note: np.random.rand() generates random numbers between 0 and 1
+# Note: np.random.normal() draws random samples from a normal distribution
+# Note: np.clip() limits the values in an array
+for user in user_ids:
+    for _, row in movies.iterrows():
+        if np.random.rand() < min(1, row['total_votes'] / 100000): # normalized probability
+            # Assign a rating close to the mean_vote with small variation
+            rating = np.clip(np.random.normal(row['mean_vote'], 1), 1, 10) # normal distribution around mean_vote
+            ratings.append([user, row['imdb_title_id'], round(rating)])
+
+
+# Dataframe with the dummy ratings
+ratings_df = pd.DataFrame(ratings, columns = ['user_id', 'imdb_title_id', 'rating'])
+ratings_df.to_csv("dummy_ratings.csv", index = False)
+print("Dummy ratings saved to 'dummy_ratings.csv'")
+
+
+# Pivot the ratings dataframe to create a user-item matrix
+ratings_df = pd.read_csv("dummy_ratings.csv")
+user_movie_matrix = ratings_df.pivot_table(index = "user_id", columns = "imdb_title_id", values = "rating")
+user_movie_matrix = user_movie_matrix.fillna(0) # no rating given = 0
+
+
+# Cosine similarity
+user_similarity = cosine_similarity(user_movie_matrix)
+user_sim_df = pd.DataFrame(user_similarity, index = user_movie_matrix.index, columns = user_movie_matrix.index)
+
+
+# Recommend movies based on user similarity
+# Note: loc accesses a group of rows and columns by labels
+# Note: isin() returns a boolean array, which is used to filter the dataframe
+def recommend_movies(user_id, n = 5):
+    if user_id not in user_sim_df.index:
+        return f"User {user_id} not found."
+    
+    # Show the movies rated by the user to understand if the recommendations make sense
+    user_rated_movies = user_movie_matrix.loc[user_id][user_movie_matrix.loc[user_id] > 0]
+    print(f"Movies rated by {user_id}:\n")
+    print(imdb_merged[imdb_merged['imdb_title_id'].isin(user_rated_movies.index)][['title', 'avg_vote']])
+    print("\n------------------------------\n")
+    
+    # Find similar users, excluding the user itself
+    similar_users = user_sim_df[user_id].drop(user_id).sort_values(ascending = False)
+    top_user = similar_users.index[0] # most similar user - top similar user
+
+    # Recommend movies rated by top_user that the target user hasn't rated
+    user_movies = set(user_movie_matrix.loc[user_id][user_movie_matrix.loc[user_id] > 0].index)
+    top_user_movies = set(user_movie_matrix.loc[top_user][user_movie_matrix.loc[top_user] > 0].index)
+    recommendations = list(top_user_movies - user_movies)
+
+    # Return top n recommendations
+    return imdb_merged[imdb_merged['imdb_title_id'].isin(recommendations)][['title', 'description', 'avg_vote']].head(n)
+
+# Tryout
+print(recommend_movies('user_1'))
+
+
+#----- Item-Based Collaborative Filtering ----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# Item Based Collaborative Filtering - recommends items based on similarity with the items that the target user rated. 
+# The similarity can be computed with Pearson Correlation or Cosine Similarity. 
+
+
+# Select relevant columns of a random sample
+# Note: we can't use the entire dataset, otherwise it will take too long to run the code
+imdb_merged = imdb_merged.sample(n = 5000, random_state = 3112) # set seed
+ratings = imdb_merged[['title', 'avg_vote']]
+
+# Pivot table: each movie as a row, avg_vote as features
+movie_ratings = ratings.pivot_table(index = 'title', values = 'avg_vote')
+
+# Normalize the ratings
+# Note: StandardScaler standardizes features by removing the mean and scaling to unit variance
+# Note: fit_transform() fits to data, then transforms it
+scaler = StandardScaler()
+movie_ratings_scaled = scaler.fit_transform(movie_ratings)
+
+# Convert to sparse matrix to save memory
+# Note: csr_matrix() compresses the sparse matrix
+movie_ratings_sparse = csr_matrix(movie_ratings_scaled)
+
+# Split dataset using indices
+num_splits = 10
+index_chunks = np.array_split(movie_ratings.index, num_splits)
+
+# Compute similarity in chunks and store results in a dictionary
+similarity_dict = {}
+
+for i in range(num_splits):
+    for j in range(num_splits):
+        # Extract submatrices from the sparse matrix
+        rows = list(index_chunks[i])
+        cols = list(index_chunks[j])
+        
+        movie_chunk_i = movie_ratings_sparse[movie_ratings.index.isin(rows)]
+        movie_chunk_j = movie_ratings_sparse[movie_ratings.index.isin(cols)]
+        
+        # Compute cosine similarity for the chunk
+        sim_chunk = cosine_similarity(movie_chunk_i, movie_chunk_j)
+        similarity_dict[(i, j)] = sim_chunk
+
+# Recommend 'n' most similar movies to a given movie title based on similarity chunks
+def recommend_movies(movie_title, n = 5):
+    
+    if movie_title not in movie_ratings.index:
+        return f"Movie {movie_title} not found."
+
+    # Identify the chunk containing the movie
+    row_chunk_idx, row_idx_in_chunk = None, None
+
+    for i, index_chunk in enumerate(index_chunks):
+        if movie_title in index_chunk:
+            row_chunk_idx = i
+            row_idx_in_chunk = list(index_chunk).index(movie_title)
+            break  # exit loop once found
+
+    if row_chunk_idx is None or row_idx_in_chunk is None:
+        return f"Movie {movie_title} not found in any chunk."
+
+    # Collect similarities from all chunks
+    # Note: hstack() stacks arrays in sequence column-wise
+    similarities = np.hstack([similarity_dict[(row_chunk_idx, j)][row_idx_in_chunk] for j in range(num_splits)])
+
+    # Get top 'n' similar movies (excluding self)
+    # Note: argsort()[::-1] returns the indices in descending order in order to get the most similar movies first
+    sorted_indices = np.argsort(similarities)[::-1][1 : n+1] # start from 1 to exclude the movie itself
+
+    # Retrieve recommended movies
+    recommended_movie_ids = movie_ratings.index[sorted_indices]
+
+    return imdb_merged[imdb_merged['title'].isin(recommended_movie_ids)][['title', 'description', 'avg_vote']]
+
+
+# Tryout
+# Note: we can't select a movie manually that is not in the sample
+movie_example = imdb_merged.sample(n = 1, random_state = 3112) # set seed
+print("Selected movie:")
+print(f"title: {movie_example['title'].values[0]}, description: {movie_example['description'].values[0]}, avg_vote: {movie_example['avg_vote'].values[0]}")
+print("\n--------------------\n")
+
+
+recommendations = recommend_movies(movie_example['title'].values[0], n = 5)
+print("Movies recommendations:")
+print(recommendations)
+
+
+
+
+
+### TAREFA #################################################################################
+### fazer matrix factorization e hybrid recommender systems
+
+
+#----- Model-Based Collaborative - Matrix Factorization ------------------------------------------------------------------------------------------------------------------------------
+
+#----- Hybrid Recommender Systems ----------------------------------------------------------------------------------------------------------------------------------------------------
+
 
