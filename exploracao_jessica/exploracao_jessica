@@ -244,7 +244,7 @@ def recommend_movies(user_id, n = 5):
     # Show the movies rated by the user to understand if the recommendations make sense
     user_rated_movies = user_movie_matrix.loc[user_id][user_movie_matrix.loc[user_id] > 0]
     print(f"Movies rated by {user_id}:\n")
-    print(imdb_merged[imdb_merged['imdb_title_id'].isin(user_rated_movies.index)][['original_title', 'avg_vote']])
+    print(imdb_merged[imdb_merged['imdb_title_id'].isin(user_rated_movies.index)][['original_title', 'description', 'avg_vote']])
     print("\n------------------------------\n")
     
     # Find similar users, excluding the user itself
@@ -273,7 +273,7 @@ print(recommend_movies('user_1'))
 # Select relevant columns of a random sample
 # Note: we can't use the entire dataset, otherwise it will take too long to run the code
 imdb_merged = imdb_merged.sample(n = 10000, random_state = 3112) # set seed
-ratings = imdb_merged[['title', 'avg_vote']]
+ratings = imdb_merged[['original_title', 'avg_vote']]
 
 # Pivot table: each movie as a row, avg_vote as features
 movie_ratings = ratings.pivot_table(index = 'original_title', values = 'avg_vote')
@@ -309,8 +309,9 @@ for i in range(num_splits):
         similarity_dict[(i, j)] = sim_chunk
 
         # Pearson correlation for the chunk
-        #correlation, _ = pearsonr(movie_chunk_i.flatten(), movie_chunk_j.flatten())
-        #similarity_dict[(i, j)] = correlation
+        #df_ratings = pd.DataFrame(movie_ratings_scaled, index = movie_ratings.index)
+        #similarity_dict = df_ratings.T.corr(method = 'pearson').to_dict()
+
 
 # Recommend 'n' most similar movies to a given movie title based on similarity chunks
 def recommend_movies(movie_title, n = 5):
@@ -358,16 +359,12 @@ print("Movies recommendations:")
 print(recommendations)
 
 
-
-
-
-
-#----- Model-Based Collaborative - Matrix Factorization ------------------------------------------------------------------------------------------------------------------------------
+#----- Matrix Factorization Collaborative Filtering ------------------------------------------------------------------------------------------------------------------------------
 
 # Matrix Factorization - decomposes the user-item matrix into two lower-dimensional matrices, one for users and one for items.
 
 
-k = 50  # number of latent factors
+k = min(50, min(user_movie_matrix.shape)-1)  # number of latent factors
 
 
 # SVD
@@ -376,7 +373,8 @@ def perform_svd(user_movie_matrix, k):
     S = np.diag(S) # convert singular values into a diagonal matrix
     return U, S, Vt
 
-U, S, Vt = perform_svd(user_movie_matrix, k)
+
+U, S, Vt = perform_svd(user_movie_matrix.values, k)
 
 
 # Predicted ratings matrix
@@ -394,13 +392,22 @@ def recommend_movies_svd(user_id, n = 5):
     # Filter out movies already rated by the user
     already_rated = user_movie_matrix.loc[user_id][user_movie_matrix.loc[user_id] > 0].index
     recommended_movies = user_ratings.drop(index = already_rated).head(n)
+
+    recommended_df = imdb_merged[imdb_merged['imdb_title_id'].isin(recommended_movies.index)][['original_title', 'description', 'avg_vote']]
+    recommended_df = recommended_df.sort_values(by = 'avg_vote', ascending = False)
     
-    return imdb_merged[imdb_merged['imdb_title_id'].isin(recommended_movies.index)][['original_title', 'description', 'avg_vote']]
+    return recommended_df
 
 # Tryout
-print(recommend_movies_svd('user_1'))
+user_example = user_movie_matrix.sample(n = 1, random_state = 3112).index[0] # random user
+user_movies = imdb_merged[imdb_merged['imdb_title_id'].isin(user_movie_matrix.loc[user_example][user_movie_matrix.loc[user_example] > 0].index)][['original_title', 'description', 'avg_vote']]
 
-
+print(f"Recommendation for: {user_example}\n")
+print("Movies previously rated by the user:")
+print(user_movies.sort_values(by = 'avg_vote', ascending = False)) # from most similarity to least similarity
+print("\n--------------------\n")
+print("Recommended movies:")
+print(recommend_movies_svd(user_example, n = 5))
 
 
 
@@ -409,12 +416,13 @@ print(recommend_movies_svd('user_1'))
 
 
 
-### TAREFAS #################################################################################
+### TAREFAS #############################################################################################################################
 ### fazer hybrid recommender systems
 ### focar em fazer ciclos, experimentar diferentes amostras e maiores
 ### Improve the initial implementation of the chosen algorithm (e.g., handle cold start problems, optimize performance).
 ### Implement a basic evaluation framework (splitting data into training/testing sets).
 ### Define evaluation metrics (e.g., RMSE, MAE for rating prediction; precision, recall, F1-score for top-N recommendations).
+### Nota: fazer apenas para um user e um filme em especifico 
 ### Evaluate the basic implementation using the chosen metrics.
 
 ### limpar código geral
