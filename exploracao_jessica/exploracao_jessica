@@ -17,9 +17,10 @@ from sklearn.preprocessing import StandardScaler # standardizes features by remo
 from scipy.sparse import csr_matrix # sparse matrix package for numeric data
 from scipy.stats import pearsonr # computes the pearson correlation coefficient
 from scipy.sparse.linalg import svds # singular value decomposition for matrix factorization
+from sklearn.metrics import mean_squared_error, mean_absolute_error, precision_score, recall_score, f1_score # evaluation metrics
 
 
-#----- Loading the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
+#----- Load the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # Note: the datasets were saved as CSV UTF-8 files; sep or delimiter
 imdb_movies = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/datasets/imdb_movies.csv', encoding = 'UTF-8', sep = ';') 
@@ -36,7 +37,7 @@ imdb_ratings = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_ma
 #imdb_ratings.info()
 
 
-#----- Merging the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
+#----- Merge the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # Note: inner join returns matching values in both tables
 imdb_merged = pd.merge(imdb_movies, imdb_ratings, how = "inner", on = "imdb_title_id")
@@ -60,7 +61,7 @@ missing_table = pd.DataFrame({'Columns': missing.index, 'Missing values': missin
 #print(missing_table)
 
 
-#----- Dropping columns ----------------------------------------------------------------------------------------------------------------------------------------------------
+#----- Dropp columns ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 size = len(imdb_merged)
 
@@ -411,18 +412,127 @@ print(recommend_movies_svd(user_example, n = 5))
 
 
 
-#----- Hybrid Recommender Systems ----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+##################################################################################################################################################################################
+# Evaluation Metrics 
+
+# Note: RMSE (Root Mean Square Error) and MAE (Mean Absolute Error) are common metrics for evaluating recommender systems;
+# precision, recall, and F1-score are common metrics for evaluating classification models;
+# RMSE and MAE are used for rating prediction; precision, recall, and F1-score are used for top-N recommendations
+
+
+# RMSE and MAE for rating predictions
+def evaluate_rating_predictions(user_movie_matrix, predicted_ratings_df):
+    ratings_actual = user_movie_matrix[user_movie_matrix > 0].values.flatten()
+    ratings_predicted = predicted_ratings_df[user_movie_matrix > 0].values.flatten()
+    
+    rmse = np.sqrt(mean_squared_error(ratings_actual, ratings_predicted))
+    mae = mean_absolute_error(ratings_actual, ratings_predicted)
+    
+    return {"RMSE": round(rmse, 4), "MAE": round(mae, 4)}
+
+# Evaluate top-N recommendations using Precision, Recall, and F1-score
+# Note: threshold is the minimum rating to consider a movie as relevant
+def evaluate_top_n_recommendations(user_id, n = 5, threshold = 6):
+    if user_id not in user_movie_matrix.index:
+        return f"User {user_id} not found."
+    
+    # Movies that the user rated positively 
+    relevant_movies = set(user_movie_matrix.loc[user_id][user_movie_matrix.loc[user_id] >= threshold].index)
+    
+    # Movies recommended by the model
+    recommended_movies = set(recommend_movies_svd(user_id, n = n)['original_title'])
+    
+    # Note: precision measures the proportion of relevant items among the recommended items, recall measures the proportion of relevant items 
+    # that were recommended, F1-score is the harmonic mean of precision and recall
+    precision = len(recommended_movies & relevant_movies) / len(recommended_movies) if recommended_movies else 0
+    recall = len(recommended_movies & relevant_movies) / len(relevant_movies) if relevant_movies else 0
+    f1_score = 2 * (precision * recall) / (precision + recall) if precision + recall > 0 else 0
+    
+    return {"Precision@N": round(precision, 4), "Recall@N": round(recall, 4), "F1-score": round(f1_score, 4)}
+
+# Evaluate rating predictions
+eval_results = evaluate_rating_predictions(user_movie_matrix, predicted_ratings_df)
+print(f"Evaluation Metrics: {eval_results}")
+
+# Evaluate top-N recommendations
+user_example = user_movie_matrix.sample(n = 1, random_state = 3112).index[0]
+metrics = evaluate_top_n_recommendations(user_example, n = 5)
+print(f"Evaluation for user {user_example}: {metrics}")
+
+
+
+
+############################################################################################################################################################################
+# Cold start problem
+
+# Note: the cold start problem occurs when a recommender system is unable to provide recommendations due to lack of data about users or items
+
+
+cos_sim = cosine_similarity(user_movie_matrix)
+
+
+# Recommend popular items
+def recommend_popular_items(user_movie_matrix, n_recommendations = 5):
+    item_popularity = np.array(user_movie_matrix.astype(bool).sum(axis = 0))
+    popular_items = np.argsort(item_popularity)[-n_recommendations:][::-1]
+    return user_movie_matrix.columns[popular_items]
+
+
+# Recommend popular items for a new user
+def recommend_for_new_user(n_recommendations = 5):
+    return recommend_popular_items(user_movie_matrix, n_recommendations)
+
+
+# Recommend similar items based on popularity
+def recommend_similar_items_based_on_popularity(user_id, user_movie_matrix, n_recommendations = 5):
+    if user_id not in user_movie_matrix.index:
+        return recommend_popular_items(user_movie_matrix, n_recommendations)
+    
+    user_ratings = user_movie_matrix.loc[user_id]
+    rated_items = user_ratings[user_ratings > 0].index
+    
+    candidate_items = user_ratings[user_ratings == 0].index
+    similar_items = []
+    
+    # Note: zip() aggregates elements from each of the iterables
+    # Note: values.reshape(1, -1) reshapes the array to 2D for cosine similarity calculation
+    # Note: extend() extends the list with the new items
+    for item in rated_items:
+        item_similarities = cosine_similarity(user_movie_matrix[item].values.reshape(1, -1), user_movie_matrix[candidate_items].values.T)
+        similar_items.extend(zip(candidate_items, item_similarities.flatten()))
+    
+    similar_items = sorted(similar_items, key = lambda x: x[1], reverse = True)
+    return [item for item, sim in similar_items[:n_recommendations]]
+
+
+# Tryout
+user_id = 100 # new user
+popular_recommendations = recommend_for_new_user()
+similar_item_recommendations = recommend_similar_items_based_on_popularity(user_id, user_movie_matrix)
+
+print(f"Popular recommendations for user {user_id}: {popular_recommendations}")
+print(f"Recommendations based on similarity for user {user_id}: {similar_item_recommendations}")
+
+
 
 
 
 
 ### TAREFAS #############################################################################################################################
-### fazer hybrid recommender systems
 ### focar em fazer ciclos, experimentar diferentes amostras e maiores
-### Improve the initial implementation of the chosen algorithm (e.g., handle cold start problems, optimize performance).
 ### Implement a basic evaluation framework (splitting data into training/testing sets).
-### Define evaluation metrics (e.g., RMSE, MAE for rating prediction; precision, recall, F1-score for top-N recommendations).
-### Nota: fazer apenas para um user e um filme em especifico 
 ### Evaluate the basic implementation using the chosen metrics.
 
+### fazer hybrid recommender systems
 ### limpar código geral
