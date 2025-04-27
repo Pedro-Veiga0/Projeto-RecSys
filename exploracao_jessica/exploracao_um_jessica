@@ -416,12 +416,7 @@ print(recommend_movies_svd(user_example, n = 5))
 
 
 
-
-
-
-
-
-
+############ !!!!!!! rever e correr !!!!!!!!
 
 ##################################################################################################################################################################################
 # Evaluation Metrics 
@@ -429,46 +424,6 @@ print(recommend_movies_svd(user_example, n = 5))
 # Note: RMSE (Root Mean Square Error) and MAE (Mean Absolute Error) are common metrics for evaluating recommender systems;
 # precision, recall, and F1-score are common metrics for evaluating classification models;
 # RMSE and MAE are used for rating prediction; precision, recall, and F1-score are used for top-N recommendations
-
-
-# RMSE and MAE for rating predictions
-def evaluate_rating_predictions(user_movie_matrix, predicted_ratings_df):
-    ratings_actual = user_movie_matrix[user_movie_matrix > 0].values.flatten()
-    ratings_predicted = predicted_ratings_df[user_movie_matrix > 0].values.flatten()
-    
-    rmse = np.sqrt(mean_squared_error(ratings_actual, ratings_predicted))
-    mae = mean_absolute_error(ratings_actual, ratings_predicted)
-    
-    return {"RMSE": round(rmse, 4), "MAE": round(mae, 4)}
-
-# Evaluate top-N recommendations using Precision, Recall, and F1-score
-# Note: threshold is the minimum rating to consider a movie as relevant
-def evaluate_top_n_recommendations(user_id, n = 5, threshold = 6):
-    if user_id not in user_movie_matrix.index:
-        return f"User {user_id} not found."
-    
-    # Movies that the user rated positively 
-    relevant_movies = set(user_movie_matrix.loc[user_id][user_movie_matrix.loc[user_id] >= threshold].index)
-    
-    # Movies recommended by the model
-    recommended_movies = set(recommend_movies_svd(user_id, n = n)['original_title'])
-    
-    # Note: precision measures the proportion of relevant items among the recommended items, recall measures the proportion of relevant items 
-    # that were recommended, F1-score is the harmonic mean of precision and recall
-    precision = len(recommended_movies & relevant_movies) / len(recommended_movies) if recommended_movies else 0
-    recall = len(recommended_movies & relevant_movies) / len(relevant_movies) if relevant_movies else 0
-    f1_score = 2 * (precision * recall) / (precision + recall) if precision + recall > 0 else 0
-    
-    return {"Precision@N": round(precision, 4), "Recall@N": round(recall, 4), "F1-score": round(f1_score, 4)}
-
-# Evaluate rating predictions
-eval_results = evaluate_rating_predictions(user_movie_matrix, predicted_ratings_df)
-print(f"Evaluation Metrics: {eval_results}")
-
-# Evaluate top-N recommendations
-user_example = user_movie_matrix.sample(n = 1, random_state = 3112).index[0]
-metrics = evaluate_top_n_recommendations(user_example, n = 5)
-print(f"Evaluation for user {user_example}: {metrics}")
 
 
 
@@ -528,10 +483,49 @@ print(f"Recommendations based on similarity for user {user_id}: {similar_item_re
 
 
 
+#############################################################################################################################################################################################
+# Implement a basic evaluation framework (splitting data into training/testing sets)
+
+
+from scipy.sparse.linalg import svds
+from sklearn.model_selection import train_test_split
+
+# Load and preprocess data (Assuming user_movie_matrix is available)
+
+# Split data into training and testing sets
+train_data, test_data = train_test_split(user_movie_matrix, test_size=0.2, random_state=42)
+
+# Compute item-item similarity using cosine similarity
+item_similarity = cosine_similarity(train_data.T)
+item_similarity_df = pd.DataFrame(item_similarity, index=train_data.columns, columns=train_data.columns)
+
+# Predict ratings using item-based collaborative filtering
+def predict_ratings_item_based(train_data, item_similarity):
+    mean_user_rating = train_data.mean(axis=1).values.reshape(-1, 1)
+    ratings_diff = train_data - mean_user_rating
+    pred = mean_user_rating + np.dot(ratings_diff.fillna(0), item_similarity) / np.array([np.abs(item_similarity).sum(axis=1)])
+    return pd.DataFrame(pred, index=train_data.index, columns=train_data.columns)
+
+# Generate predictions
+predicted_ratings_item = predict_ratings_item_based(train_data, item_similarity)
+
+# Evaluation using RMSE and MAE
+def evaluate_predictions(test_data, predicted_ratings):
+    test_actual = test_data[test_data > 0].values.flatten()
+    test_predicted = predicted_ratings[test_data > 0].values.flatten()
+    rmse = np.sqrt(mean_squared_error(test_actual, test_predicted))
+    mae = mean_absolute_error(test_actual, test_predicted)
+    print(f"RMSE: {rmse:.4f}")
+    print(f"MAE: {mae:.4f}")
+
+# Evaluate item-based collaborative filtering
+evaluate_predictions(test_data, predicted_ratings_item)
+
+
+
 
 ### TAREFAS #############################################################################################################################
 ### focar em fazer ciclos, experimentar diferentes amostras e maiores
-### Implement a basic evaluation framework (splitting data into training/testing sets).
 ### Evaluate the basic implementation using the chosen metrics.
 
 ### fazer hybrid recommender systems
