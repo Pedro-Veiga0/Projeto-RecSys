@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Recommender</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <h1>Movie Recommender</h1>
+    <form method="post">
+        <input type="text" name="movie" placeholder="Enter movie title" required>
+        <input type="submit" value="Recommend">
+    </form>
+
+    {% if movie_name %}
+        <h2>Recommendations for "{{ movie_name }}":</h2>
+        <div style="display:flex; flex-wrap: wrap;">
+            {% for rec in recommendations %}
+                <div style="margin: 10px; text-align:center;">
+                    {% if rec.poster_url %}
+                        <img src="{{ rec.poster_url }}" alt="{{ rec.title }}" style="width:150px; height:auto;">
+                    {% else %}
+                        <div style="width:150px; height:225px; background:#ccc; display:flex; align-items:center; justify-content:center;">
+                            No Image
+                        </div>
+                    {% endif %}
+                    <div>{{ rec.title }}</div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</body>
+</html>
