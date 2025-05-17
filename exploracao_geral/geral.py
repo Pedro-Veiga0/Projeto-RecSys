@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler # standardizes features by remo
 from scipy.sparse import csr_matrix # sparse matrix package for numeric data
 
 
-#----- Loading the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
+#----- Loading the datasets----------------------------------------------------------------------------------------------------------------------------------------------------
 
 #movies = pd.read_csv('datasets/imbd_movies.csv', sep = ";", encoding = "latin1")
 #moviesaux = pd.read_csv('datasets/imdb_movies.csv', sep=";", encoding="latin1")
