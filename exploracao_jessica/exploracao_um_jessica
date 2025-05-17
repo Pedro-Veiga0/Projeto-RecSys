@@ -15,9 +15,12 @@ import re # regular expressions
 from sklearn.metrics.pairwise import cosine_similarity # computes cosine similarity between samples
 from sklearn.preprocessing import StandardScaler # standardizes features by removing the mean and scaling to unit variance
 from scipy.sparse import csr_matrix # sparse matrix package for numeric data
+from scipy.stats import pearsonr # computes the pearson correlation coefficient
+from scipy.sparse.linalg import svds # singular value decomposition for matrix factorization
+from sklearn.metrics import mean_squared_error, mean_absolute_error, precision_score, recall_score, f1_score # evaluation metrics
 
 
-#----- Loading the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
+#----- Load the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # Note: the datasets were saved as CSV UTF-8 files; sep or delimiter
 imdb_movies = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/datasets/imdb_movies.csv', encoding = 'UTF-8', sep = ';') 
@@ -34,7 +37,7 @@ imdb_ratings = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_ma
 #imdb_ratings.info()
 
 
-#----- Merging the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
+#----- Merge the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # Note: inner join returns matching values in both tables
 imdb_merged = pd.merge(imdb_movies, imdb_ratings, how = "inner", on = "imdb_title_id")
@@ -58,7 +61,7 @@ missing_table = pd.DataFrame({'Columns': missing.index, 'Missing values': missin
 #print(missing_table)
 
 
-#----- Dropping columns ----------------------------------------------------------------------------------------------------------------------------------------------------
+#----- Dropp columns ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 size = len(imdb_merged)
 
@@ -173,8 +176,9 @@ for coluna in imdb_merged.select_dtypes(include = ["int64"]).columns:
 
 ############################################################################################################################################################################
 # Algorithm Selection & Literature Review
+# Basic Implementation & Evaluation Setup
 
-# -> Implement a very basic version of the chosen algorithm (e.g., User-Based Collaborative Filtering using cosine similarity).
+# Note: against what was expected, the colum 'original_title' has more titles in english than 'title'
 
 
 #----- User-Based Collaborative Filtering ----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -184,12 +188,12 @@ for coluna in imdb_merged.select_dtypes(include = ["int64"]).columns:
 
 
 # Select relevant columns
-movies = imdb_merged[['imdb_title_id', 'title', 'mean_vote', 'total_votes']]
+movies = imdb_merged[['imdb_title_id', 'original_title', 'mean_vote', 'total_votes']]
 
 
 # Number of dummy users
 # Note: use a small number, otherwise it will take too long to run the code
-num_users = 10 
+num_users = 20 
 user_ids = [f'user_{i}' for i in range(1, num_users + 1)]
 
 
@@ -221,7 +225,13 @@ user_movie_matrix = user_movie_matrix.fillna(0) # no rating given = 0
 
 
 # Cosine similarity
+# Note: cosine_similarity() returns a matrix of shape (n_samples, n_samples) containing the pairwise cosine similarity scores
 user_similarity = cosine_similarity(user_movie_matrix)
+
+# Pearson correlation
+# Note: the result is a square matrix with the same number of rows and columns as the number of users
+#user_similarity = user_movie_matrix.T.corr(method = 'pearson') # transpose the matrix to get user-user similarity and not item-item similarity
+
 user_sim_df = pd.DataFrame(user_similarity, index = user_movie_matrix.index, columns = user_movie_matrix.index)
 
 
@@ -235,7 +245,7 @@ def recommend_movies(user_id, n = 5):
     # Show the movies rated by the user to understand if the recommendations make sense
     user_rated_movies = user_movie_matrix.loc[user_id][user_movie_matrix.loc[user_id] > 0]
     print(f"Movies rated by {user_id}:\n")
-    print(imdb_merged[imdb_merged['imdb_title_id'].isin(user_rated_movies.index)][['title', 'avg_vote']])
+    print(imdb_merged[imdb_merged['imdb_title_id'].isin(user_rated_movies.index)][['original_title', 'description', 'avg_vote']])
     print("\n------------------------------\n")
     
     # Find similar users, excluding the user itself
@@ -248,7 +258,7 @@ def recommend_movies(user_id, n = 5):
     recommendations = list(top_user_movies - user_movies)
 
     # Return top n recommendations
-    return imdb_merged[imdb_merged['imdb_title_id'].isin(recommendations)][['title', 'description', 'avg_vote']].head(n)
+    return imdb_merged[imdb_merged['imdb_title_id'].isin(recommendations)][['original_title', 'description', 'avg_vote']].head(n)
 
 # Tryout
 print(recommend_movies('user_1'))
@@ -263,11 +273,11 @@ print(recommend_movies('user_1'))
 
 # Select relevant columns of a random sample
 # Note: we can't use the entire dataset, otherwise it will take too long to run the code
-imdb_merged = imdb_merged.sample(n = 5000, random_state = 3112) # set seed
-ratings = imdb_merged[['title', 'avg_vote']]
+imdb_merged = imdb_merged.sample(n = 10000, random_state = 3112) # set seed
+ratings = imdb_merged[['original_title', 'avg_vote']]
 
 # Pivot table: each movie as a row, avg_vote as features
-movie_ratings = ratings.pivot_table(index = 'title', values = 'avg_vote')
+movie_ratings = ratings.pivot_table(index = 'original_title', values = 'avg_vote')
 
 # Normalize the ratings
 # Note: StandardScaler standardizes features by removing the mean and scaling to unit variance
@@ -295,9 +305,14 @@ for i in range(num_splits):
         movie_chunk_i = movie_ratings_sparse[movie_ratings.index.isin(rows)]
         movie_chunk_j = movie_ratings_sparse[movie_ratings.index.isin(cols)]
         
-        # Compute cosine similarity for the chunk
+        # Cosine similarity for the chunk
         sim_chunk = cosine_similarity(movie_chunk_i, movie_chunk_j)
         similarity_dict[(i, j)] = sim_chunk
+
+        # Pearson correlation for the chunk
+        #df_ratings = pd.DataFrame(movie_ratings_scaled, index = movie_ratings.index)
+        #similarity_dict = df_ratings.T.corr(method = 'pearson').to_dict()
+
 
 # Recommend 'n' most similar movies to a given movie title based on similarity chunks
 def recommend_movies(movie_title, n = 5):
@@ -323,36 +338,195 @@ def recommend_movies(movie_title, n = 5):
 
     # Get top 'n' similar movies (excluding self)
     # Note: argsort()[::-1] returns the indices in descending order in order to get the most similar movies first
-    sorted_indices = np.argsort(similarities)[::-1][1 : n+1] # start from 1 to exclude the movie itself
+    # sorted_indices = np.argsort(similarities)[::-1][1 : n+1] # start from 1 to exclude the movie itself
+    sorted_indices = [i for i, _ in sorted(enumerate(similarities), key = lambda x: x[1], reverse = True)][1 : n+1]
 
     # Retrieve recommended movies
     recommended_movie_ids = movie_ratings.index[sorted_indices]
 
-    return imdb_merged[imdb_merged['title'].isin(recommended_movie_ids)][['title', 'description', 'avg_vote']]
+    return imdb_merged[imdb_merged['original_title'].isin(recommended_movie_ids)][['original_title', 'description', 'avg_vote']]
 
 
 # Tryout
 # Note: we can't select a movie manually that is not in the sample
 movie_example = imdb_merged.sample(n = 1, random_state = 3112) # set seed
 print("Selected movie:")
-print(f"title: {movie_example['title'].values[0]}, description: {movie_example['description'].values[0]}, avg_vote: {movie_example['avg_vote'].values[0]}")
+print(f"title: {movie_example['original_title'].values[0]}, description: {movie_example['description'].values[0]}, avg_vote: {movie_example['avg_vote'].values[0]}")
 print("\n--------------------\n")
 
 
-recommendations = recommend_movies(movie_example['title'].values[0], n = 5)
+recommendations = recommend_movies(movie_example['original_title'].values[0], n = 5)
 print("Movies recommendations:")
 print(recommendations)
 
 
+#----- Matrix Factorization Collaborative Filtering ------------------------------------------------------------------------------------------------------------------------------
+
+# Matrix Factorization - decomposes the user-item matrix into two lower-dimensional matrices, one for users and one for items.
+
+
+k = min(50, min(user_movie_matrix.shape)-1)  # number of latent factors
+
+
+# SVD
+def perform_svd(user_movie_matrix, k):
+    U, S, Vt = svds(user_movie_matrix, k = k)
+    S = np.diag(S) # convert singular values into a diagonal matrix
+    return U, S, Vt
+
+
+U, S, Vt = perform_svd(user_movie_matrix.values, k)
+
+
+# Predicted ratings matrix
+predicted_ratings = np.dot(np.dot(U, S), Vt)
+predicted_ratings_df = pd.DataFrame(predicted_ratings, index = user_movie_matrix.index, columns = user_movie_matrix.columns)
+
+
+def recommend_movies_svd(user_id, n = 5):
+    if user_id not in predicted_ratings_df.index:
+        return f"User {user_id} not found."
+    
+    # Get the movies with highest predicted ratings for the user
+    user_ratings = predicted_ratings_df.loc[user_id].sort_values(ascending = False)
+    
+    # Filter out movies already rated by the user
+    already_rated = user_movie_matrix.loc[user_id][user_movie_matrix.loc[user_id] > 0].index
+    recommended_movies = user_ratings.drop(index = already_rated).head(n)
+
+    recommended_df = imdb_merged[imdb_merged['imdb_title_id'].isin(recommended_movies.index)][['original_title', 'description', 'avg_vote']]
+    recommended_df = recommended_df.sort_values(by = 'avg_vote', ascending = False)
+    
+    return recommended_df
+
+# Tryout
+user_example = user_movie_matrix.sample(n = 1, random_state = 3112).index[0] # random user
+user_movies = imdb_merged[imdb_merged['imdb_title_id'].isin(user_movie_matrix.loc[user_example][user_movie_matrix.loc[user_example] > 0].index)][['original_title', 'description', 'avg_vote']]
+
+print(f"Recommendation for: {user_example}\n")
+print("Movies previously rated by the user:")
+print(user_movies.sort_values(by = 'avg_vote', ascending = False)) # from most similarity to least similarity
+print("\n--------------------\n")
+print("Recommended movies:")
+print(recommend_movies_svd(user_example, n = 5))
 
 
 
-### TAREFA #################################################################################
-### fazer matrix factorization e hybrid recommender systems
 
 
-#----- Model-Based Collaborative - Matrix Factorization ------------------------------------------------------------------------------------------------------------------------------
-
-#----- Hybrid Recommender Systems ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+############ !!!!!!! rever e correr !!!!!!!!
+
+##################################################################################################################################################################################
+# Evaluation Metrics 
+
+# Note: RMSE (Root Mean Square Error) and MAE (Mean Absolute Error) are common metrics for evaluating recommender systems;
+# precision, recall, and F1-score are common metrics for evaluating classification models;
+# RMSE and MAE are used for rating prediction; precision, recall, and F1-score are used for top-N recommendations
+
+
+
+
+############################################################################################################################################################################
+# Cold start problem
+
+# Note: the cold start problem occurs when a recommender system is unable to provide recommendations due to lack of data about users or items
+
+
+cos_sim = cosine_similarity(user_movie_matrix)
+
+
+# Recommend popular items
+def recommend_popular_items(user_movie_matrix, n_recommendations = 5):
+    item_popularity = np.array(user_movie_matrix.astype(bool).sum(axis = 0))
+    popular_items = np.argsort(item_popularity)[-n_recommendations:][::-1]
+    return user_movie_matrix.columns[popular_items]
+
+
+# Recommend popular items for a new user
+def recommend_for_new_user(n_recommendations = 5):
+    return recommend_popular_items(user_movie_matrix, n_recommendations)
+
+
+# Recommend similar items based on popularity
+def recommend_similar_items_based_on_popularity(user_id, user_movie_matrix, n_recommendations = 5):
+    if user_id not in user_movie_matrix.index:
+        return recommend_popular_items(user_movie_matrix, n_recommendations)
+    
+    user_ratings = user_movie_matrix.loc[user_id]
+    rated_items = user_ratings[user_ratings > 0].index
+    
+    candidate_items = user_ratings[user_ratings == 0].index
+    similar_items = []
+    
+    # Note: zip() aggregates elements from each of the iterables
+    # Note: values.reshape(1, -1) reshapes the array to 2D for cosine similarity calculation
+    # Note: extend() extends the list with the new items
+    for item in rated_items:
+        item_similarities = cosine_similarity(user_movie_matrix[item].values.reshape(1, -1), user_movie_matrix[candidate_items].values.T)
+        similar_items.extend(zip(candidate_items, item_similarities.flatten()))
+    
+    similar_items = sorted(similar_items, key = lambda x: x[1], reverse = True)
+    return [item for item, sim in similar_items[:n_recommendations]]
+
+
+# Tryout
+user_id = 100 # new user
+popular_recommendations = recommend_for_new_user()
+similar_item_recommendations = recommend_similar_items_based_on_popularity(user_id, user_movie_matrix)
+
+print(f"Popular recommendations for user {user_id}: {popular_recommendations}")
+print(f"Recommendations based on similarity for user {user_id}: {similar_item_recommendations}")
+
+
+
+
+
+#############################################################################################################################################################################################
+# Implement a basic evaluation framework (splitting data into training/testing sets)
+
+
+from scipy.sparse.linalg import svds
+from sklearn.model_selection import train_test_split
+
+# Load and preprocess data (Assuming user_movie_matrix is available)
+
+# Split data into training and testing sets
+train_data, test_data = train_test_split(user_movie_matrix, test_size=0.2, random_state=42)
+
+# Compute item-item similarity using cosine similarity
+item_similarity = cosine_similarity(train_data.T)
+item_similarity_df = pd.DataFrame(item_similarity, index=train_data.columns, columns=train_data.columns)
+
+# Predict ratings using item-based collaborative filtering
+def predict_ratings_item_based(train_data, item_similarity):
+    mean_user_rating = train_data.mean(axis=1).values.reshape(-1, 1)
+    ratings_diff = train_data - mean_user_rating
+    pred = mean_user_rating + np.dot(ratings_diff.fillna(0), item_similarity) / np.array([np.abs(item_similarity).sum(axis=1)])
+    return pd.DataFrame(pred, index=train_data.index, columns=train_data.columns)
+
+# Generate predictions
+predicted_ratings_item = predict_ratings_item_based(train_data, item_similarity)
+
+# Evaluation using RMSE and MAE
+def evaluate_predictions(test_data, predicted_ratings):
+    test_actual = test_data[test_data > 0].values.flatten()
+    test_predicted = predicted_ratings[test_data > 0].values.flatten()
+    rmse = np.sqrt(mean_squared_error(test_actual, test_predicted))
+    mae = mean_absolute_error(test_actual, test_predicted)
+    print(f"RMSE: {rmse:.4f}")
+    print(f"MAE: {mae:.4f}")
+
+# Evaluate item-based collaborative filtering
+evaluate_predictions(test_data, predicted_ratings_item)
+
+
+
+
+### TAREFAS #############################################################################################################################
+### focar em fazer ciclos, experimentar diferentes amostras e maiores
+### Evaluate the basic implementation using the chosen metrics.
+
+### fazer hybrid recommender systems
+### limpar código geral

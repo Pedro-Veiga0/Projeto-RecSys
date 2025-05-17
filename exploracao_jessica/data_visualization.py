@@ -4,7 +4,7 @@
 # -> Initial visualization of data using Matplotlib/Seaborn
 
 
-#----- Importing libraries
+#----- Importing libraries ---------------------------------------------------------------------------------------------------------
 
 import numpy as np # array-processing package
 import pandas as pd # data analysis toolkit
@@ -12,20 +12,20 @@ import matplotlib.pyplot as plt # static, animated and interactive visualization
 import seaborn as sns # data visualization library
 
 
-#----- Loading the datasets
+#----- Loading the datasets ---------------------------------------------------------------------------------------------------------
 
 # Note: the datasets were saved as CSV UTF-8 files; sep or delimiter
 imdb_movies = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/datasets/imdb_movies.csv', encoding = 'UTF-8', sep = ';') 
 imdb_ratings = pd.read_csv(r'C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/datasets/imdb_ratings.csv', encoding = 'UTF-8', sep = ';')
 
 
-#----- Merging the datasets
+#----- Merging the datasets ---------------------------------------------------------------------------------------------------------
 
 # Note: inner join returns matching values in both tables
 imdb_merged = pd.merge(imdb_movies, imdb_ratings, how = "inner", on = "imdb_title_id")
 
 
-#----- Dropping columns
+#----- Dropping columns -------------------------------------------------------------------------------------------------------------------
 
 size = len(imdb_merged)
 
@@ -35,7 +35,7 @@ for column in imdb_merged.columns:
         imdb_merged.drop(columns = [column], inplace = True)
 
 
-#----- Data visualization
+#----- Data visualization ---------------------------------------------------------------------------------------------------------
 
 # Path to save the figures
 save_dir = r"C:/Users/Asus/Desktop/mestrado/projeto_integrado_matematica_computacao/Projeto-RecSys/exploracao_jessica/figures"
@@ -107,7 +107,7 @@ gender_age_ratings = pd.DataFrame({'Age Class': ['18-29', '30-44', '45+'],
                                              imdb_merged['males_30age_avg_vote'].mean(),
                                              imdb_merged['males_45age_avg_vote'].mean()],
 
-                                     'Female': [imdb_merged['females_18age_avg_vote'].mean(),
+                                    'Female': [imdb_merged['females_18age_avg_vote'].mean(),
                                                 imdb_merged['females_30age_avg_vote'].mean(),
                                                 imdb_merged['females_45age_avg_vote'].mean()]})
 
@@ -126,73 +126,3 @@ plt.show()
 
 
 
-
-############################################################################################################################################################################
-
-# Coluna year:
-
-graph_year_2009 = imdb_merged['year'].value_counts().sort_index(ascending = True).head(10).plot(kind = 'bar', color = 'purple')
-
-graph_year_2009.set_title('Movies released since 2009', color = 'purple', fontweight = 'bold')
-graph_year_2009.set_xlabel('Year', color = 'purple')
-graph_year_2009.set_ylabel('Number of Movies Launched', color = 'purple')
-graph_year_2009.set_facecolor('lavender') # altera a cor dos quadradinhos por trás do gráfico
-
-
-plt.gcf().set_facecolor('lavender')  # Altera a cor do fundo do gráfico em volta dos quadradinhos
-
-plt.show()
-
-graph_year_1923 = imdb_merged['year'].value_counts().sort_index(ascending = True).tail(10).plot(kind = 'bar', color = 'purple')
-
-graph_year_1923.set_title('Movies released until 1923', color = 'purple', fontweight = 'bold')
-graph_year_1923.set_xlabel('Year', color = 'purple')
-graph_year_1923.set_ylabel('Number of Movies Launched', color = 'purple')
-graph_year_1923.set_facecolor('lavender') 
-
-plt.gcf().set_facecolor('lavender')  
-
-plt.show()
-
-graph_year = imdb_merged['year'].value_counts().sort_index().plot(kind='line', marker='o', color = 'purple')
-
-graph_year.set_title('Movies released', color = 'purple', fontweight = 'bold')
-graph_year.set_xlabel('Year', color = 'purple')
-graph_year.set_ylabel('Number of Movies Launched', color = 'purple')
-graph_year.set_facecolor('lavender') # altera a cor dos quadradinhos por trás do gráfico
-
-plt.gcf().set_facecolor('lavender')  
-
-plt.show()
-
-
-
-
-# GRÁFICO DA MÉDIA DE VOTOS POR FAIXA ETÁRIA EM CADA GÉNERO:
-
-# Criar uma cópia do DataFrame removendo valores nulos e separando os géneros
-df_exploded = imdb_merged.dropna(subset=['genre']).copy()
-df_exploded['genre'] = df_exploded['genre'].str.split(', ')  # Separar géneros
-df_exploded = df_exploded.explode('genre')  # Explodir para várias linhas
-
-# Somar os votos por género e faixa etária
-votos_por_genero = df_exploded.groupby('genre')[[
-    'allgenders_18_to_30_votes',
-    'allgenders_30_to_45_votes',
-    'allgenders_45_and_above_votes'
-]].sum()
-
-# Criar gráfico de barras empilhadas
-votos_por_genero.plot(kind = 'bar', stacked = True, figsize = (12, 6), colormap = 'viridis')
-
-# Personalizar gráfico
-plt.title('Votes Distribution by Genre and Age Group', fontsize = 14, fontweight = 'bold', color = 'purple')
-plt.xlabel('Genre', color = 'purple')
-plt.ylabel('Total Votes', color = 'purple')
-plt.xticks(rotation = 45)  # Rodar os nomes do eixo dos x para melhor visualização
-plt.legend(['18-30 years', '30-45 years', '45+ years'], title = "Age Group")
-
-plt.gca().set_facecolor('paleturquoise')  # Cor dos quadrados do gráfico
-plt.gcf().set_facecolor('paleturquoise')
-
-plt.show()
