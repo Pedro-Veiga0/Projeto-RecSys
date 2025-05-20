@@ -1,0 +1,57 @@
+#----- Import libraries ----------------------------------------------------------------------------------------------------------------------------------------------------
+
+import numpy as np # array-processing package
+import pandas as pd # data analysis toolkit
+import matplotlib.pyplot as plt # static, animated and interactive visualizations
+import seaborn as sns # data visualization library
+import re # regular expressions
+from sklearn.metrics.pairwise import cosine_similarity # computes cosine similarity between samples
+from sklearn.preprocessing import StandardScaler # standardizes features by removing the mean and scaling to unit variance
+from scipy.sparse import csr_matrix # sparse matrix package for numeric data
+from scipy.stats import pearsonr # computes the pearson correlation coefficient
+from scipy.sparse.linalg import svds # singular value decomposition for matrix factorization
+from sklearn.metrics import mean_squared_error, mean_absolute_error, precision_score, recall_score, f1_score # evaluation metrics
+from sklearn.model_selection import train_test_split # splits arrays or matrices into random train and test subsets
+
+
+#----- Load the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
+
+#----- Merge the datasets ----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+#----- Handle missing values ----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+# Complement country and language
+# Note: agg() applies a function to the group; lambda is an anonymous function; empty checks if the mode is empty
+country_mode_per_language = imdb_merged.groupby("language")["country"].agg(lambda x: x.mode()[0] if not x.mode().empty else "NA")
+language_mode_per_country = imdb_merged.groupby("country")["language"].agg(lambda x: x.mode()[0] if not x.mode().empty else "NA")
+
+
+# Fill country with the mode of language
+# Note: .map() maps values of series according to input correspondence
+imdb_merged.loc[imdb_merged["country"].isna(), "country"] = imdb_merged["language"].map(country_mode_per_language)
+# Fill language with the mode of country
+imdb_merged.loc[imdb_merged["language"].isna(), "language"] = imdb_merged["country"].map(language_mode_per_country)
+# Fill the remaining missing values with NA
+imdb_merged.fillna({"country": "NA", "language": "NA"}, inplace = True)
+
+
+
+#----- Handle data types ----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
