@@ -1,10 +1,198 @@
 #----- User-Based Collaborative Filtering ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+user_ratings = pd.read_csv("user_ratings.csv") 
+
+#user_movie_matrix = user_ratings.pivot(index = ' User ID ', columns = ' Movie ID ', values = ' User Rating ')
+#user_movie_matrix = user_movie_matrix.fillna(0)
+#print(user_movie_matrix)
+
+train_data = {}
+test_data = {}
+sem_ratings = []
+test_size = 0.6
 
 
+#Separar os dados de cada utilizador em treino e teste
+for user_id in user_ratings[' User ID '].unique():
+    filmes_avaliados = user_ratings[user_ratings[' User ID '] == user_id]
+
+    if len(filmes_avaliados) > 5:
+        train, test = train_test_split(filmes_avaliados, test_size=test_size, random_state=4465)
+        train_data[user_id] = train
+        test_data[user_id] = test
+    else:
+        sem_ratings.append(user_id)
+
+#Criar nova matriz utilizador-filme apenas com os dados de treino
+train_ratings = pd.concat(train_data.values())  # Reunir todas as avaliações de treino
+train_movie_matrix = train_ratings.pivot(index=' User ID ', columns=' Movie ID ', values=' User Rating ').fillna(0)
+
+#Calcular similaridade entre filmes
+user_similarity = cosine_similarity(train_movie_matrix)
+#user_similarity = train_movie_matrix.T.corr(method='pearson')
+user_similarity_df = pd.DataFrame(user_similarity, index=train_movie_matrix.index, columns=train_movie_matrix.index)
+#print(user_similarity_df.head())
 
 
+def recomendar_UBC(user_id, num_rec, dataset, ratings_df):
+
+    sims = user_similarity_df[user_id].drop(user_id).sort_values(ascending=False)
+    top_k = sims[:20]
+
+    # Score inicial
+    weighted_ratings = (train_movie_matrix.loc[top_k.index].T.dot(top_k) / top_k.sum())
+
+    # Filtra filmes já vistos
+    user_rated = train_movie_matrix.loc[user_id]
+    preds = weighted_ratings[user_rated == 0]
+
+    # Obter géneros preferidos
+    generos_top = genero_preferido(user_id, ratings_df, dataset)
+
+    # Obter géneros dos filmes recomendados
+    filmes_generos = dataset.set_index('imdb_title_id').loc[preds.index][['genre']]
+    filmes_generos['genre'] = filmes_generos['genre'].fillna('').str.split(',')
+    filmes_generos = filmes_generos['genre'].apply(lambda genres: [g.strip() for g in genres])
+
+    # Aplicar peso dos géneros diretamente ao score
+    genre_weights = []
+    for generos in filmes_generos:
+        if any(g in generos_top for g in generos):
+            genre_weights.append(1.5)
+        else:
+            genre_weights.append(0.7)
+    
+    # Combina os scores dos vizinhos com os pesos dos géneros
+    preds = preds * genre_weights
+    preds = preds.sort_values(ascending=False)
+
+    # Remove a metade inferior
+    half = int(len(preds) * 0.5)
+    if half > 0:
+        preds = preds.iloc[:-half]
+
+    #sampled = preds.sample(100, weights=preds, random_state=42)
+    #sampled_ids = sampled.index.tolist()
+    sampled_ids = preds.index[:50].tolist()
+
+    reranked = rerank_diversidade_novidade(sampled_ids, dataset)
+
+    return reranked[:num_rec]
+    #return preds.index[:num_rec].tolist()
+
+
+# ----- Funções auxiliares - User-Based Collaborative Filtering ------------------------------------------------------------------------------------------------------------------
+
+def fallback_recomendacoes(user_id, dataset, ratings_df):
+    #Filmes já vistos
+    vistos = train_movie_matrix.loc[user_id]
+    filmes_vistos = set(vistos[vistos > 0].index)
+
+    #Géneros preferidos
+    generos = genero_preferido(user_id, ratings_df, dataset)
+
+    #Filmes do género preferido que o user ainda não viu
+    dataset_genero = dataset.copy()
+    dataset_genero['genre'] = dataset_genero['genre'].fillna('').str.split(',')
+    dataset_genero = dataset_genero.explode('genre')
+    dataset_genero['genre'] = dataset_genero['genre'].str.strip()
+
+    candidatos_genero = dataset_genero[
+        dataset_genero['genre'].isin(generos)
+    ].drop_duplicates(subset='imdb_title_id')
+
+    candidatos_genero = candidatos_genero[
+        ~candidatos_genero['imdb_title_id'].isin(filmes_vistos)
+    ]
+
+    num_generos = np.random.randint(4,8)
+    num_populares = 10 - num_generos
+    filmes_genero = candidatos_genero['imdb_title_id'].sample(
+        min(num_generos, len(candidatos_genero)), random_state=4465).tolist()
+
+    #Filmes populares ou recentes ainda não vistos
+    candidatos_extras = [f for f in popular_movies if f not in filmes_vistos]
+    filmes_extras = candidatos_extras[:num_populares]
+
+    return filmes_genero + filmes_extras
+
+def rerank_diversidade_novidade(recs, dataset):
+    df = dataset[dataset['imdb_title_id'].isin(recs)].copy()
+    df['year'] = pd.to_numeric(df['year'], errors='coerce')
+    df['votes'] = pd.to_numeric(df.get('votes', 0), errors='coerce')
+
+    #Score novidade: quanto mais recente, maior o score
+    ano_max = df['year'].max()
+    ano_min = df['year'].min()
+    df['score_novidade'] = (df['year'] - ano_min) / (ano_max - ano_min + 1e-9)
+
+    #Score popularidade invertida: quanto menos votos, maior o score
+    vot_max = df['votes'].max()
+    df['score_popularidade'] = 1 - (df['votes'] / (vot_max + 1e-9))
+
+    #Combinações dos dois scores
+    df['score_rerank'] = 0.6 * df['score_novidade'] + 0.4 * df['score_popularidade']
+
+    #Ordena segundo este novo score e devolve a lista de IDs
+    return df.sort_values('score_rerank', ascending=False)['imdb_title_id'].tolist()
+
+#Função auxiliar para conseguir o nome do filme
+def get_titulo(movie_id):
+    title = dataset.loc[dataset['imdb_title_id'] == movie_id, 'original_title']
+    return title.values[0]
+
+#Função auxiliar para conseguir o genero preferido
+def genero_preferido(user_id, ratings_df, dataset):
+    filmes_user = ratings_df[ratings_df[' User ID '] == user_id]
+    filmes_user = filmes_user.merge(dataset[['imdb_title_id', 'genre']], left_on=' Movie ID ', right_on='imdb_title_id')
+
+    #Expandir géneros (caso estejam separados por vírgulas)
+    filmes_user['genre'] = filmes_user['genre'].str.split(',')
+    filmes_user = filmes_user.explode('genre')
+    filmes_user['genre'] = filmes_user['genre'].str.strip()
+
+    #Calcular média de rating por género
+    media_por_genero = filmes_user.groupby('genre')[' User Rating '].mean().sort_values(ascending=False)
+    top_generos = media_por_genero.index[:2].tolist()  
+    return top_generos
+
+# ----- Criação de Utilizadores (Makes a csv file with a fixed number of users and ratings) ------------------------------------------------------------------------------------------------------------------
+
+# If there's a need to see an example of the csv, go to exploracao_miguel/user_ratings.csv
+
+
+users = list(range(1, 101)) #Criar 100 users
+user_ratings = []
+num_filmesfixos = 1250
+num_filmestotais = 2500
+
+#Escolher alguns filmes, para que haja garantia que temos mais do que uma review em maior parte dos filme.
+#Desta forma reduz-se o número de zeros na matriz de similariedade
+filmes_fixos = np.random.choice(dataset['imdb_title_id'], size = num_filmesfixos, replace = False)
+
+for user in users:
+    filmes_avaliados = list(filmes_fixos)
+
+    #Preencher o resto com filmes aleatórios
+    filmes_restantes = np.random.choice(
+        dataset[~dataset['imdb_title_id'].isin(filmes_fixos)]['imdb_title_id'],
+        size = num_filmestotais - num_filmesfixos, 
+        replace = False
+    )
+
+    filmes_avaliados.extend(filmes_restantes)
+
+    #Gerar ratings para cada filme avaliado pelo utilizador
+    for movie_id in filmes_avaliados:
+        avg_vote = dataset.loc[dataset['imdb_title_id'] == movie_id, 'avg_vote'].values[0]
+        rating = np.clip(np.random.normal(avg_vote, 3), 1, 10) #Centro da distribuição é o avg_vote e a standard deviation é 3
+        user_ratings.append({' User ID ': user, ' Movie ID ': movie_id, ' User Rating ': round(rating, 1)})
+
+
+ratings_df = pd.DataFrame(user_ratings)
+ratings_df.to_csv("user_ratings.csv", index=False) 
+#print(ratings_df)
 
 # ----- Item-Based Collaborative Filtering ------------------------------------------------------------------------------------------------------------------
 
@@ -459,3 +647,41 @@ for k in param_grid_matrix_factorization['k']:
     rmse, mae = evaluate_predictions(user_movie_matrix, predicted)
 
     print(f"Latent factors (k): {k} --> RMSE: {rmse}, MAE: {mae}")
+
+
+# Test for Hybrid User-Based Collaborative Filtering (Already with tuning and its evaluation metric)
+
+def avaliar_recomendacoes_com_genero(user_id, recomendacoes, ground_truth, dataset, genero_peso=0.5, filme_peso=0.5):
+    filmes_certos = sum(1 for filme in recomendacoes if filme in ground_truth)
+    
+    generos_user = genero_preferido(user_id, ratings_df, dataset)
+
+    #Pega os géneros dos filmes recomendados
+    filmes_rec_genero = dataset[dataset['imdb_title_id'].isin(recomendacoes)][['imdb_title_id', 'genre']]
+    filmes_rec_genero['genre'] = filmes_rec_genero['genre'].str.split(',')
+    filmes_rec_genero = filmes_rec_genero.explode('genre')
+    filmes_rec_genero['genre'] = filmes_rec_genero['genre'].str.strip()
+
+    #Ver quantos dos filmes recomendados contêm o género preferido
+    genero_certo = filmes_rec_genero['genre'].isin(generos_user).sum()
+
+    total_recs = len(recomendacoes)
+    filme_score = filmes_certos / total_recs
+    genero_score = genero_certo / total_recs
+
+    score_final = (filme_peso * filme_score) + (genero_peso * genero_score)
+    return score_final
+
+
+#Teste para todos os users no dataset que tem ratings suficientes
+scores_array = []
+for user_id in test_data.keys():
+    ground_truth = test_data[user_id][' Movie ID '].tolist()  
+    recomendacoes = recomendar_UBC(user_id, 10, dataset, ratings_df)  
+    score = avaliar_recomendacoes_com_genero(user_id, recomendacoes, ground_truth, dataset)
+    if score < 0.1:
+        recomendacoes = fallback_recomendacoes(user_id, dataset, ratings_df)
+        score = avaliar_recomendacoes_com_genero(user_id, recomendacoes, ground_truth, dataset)
+    scores_array.append(score)
+print([round(float(score), 3) for score in scores_array])
+print(f"Avaliação Média: {np.average(scores_array):.2f}")
