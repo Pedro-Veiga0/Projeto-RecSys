@@ -1,0 +1,1012 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.multioutput import MultiOutputClassifier
+from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.metrics import classification_report
+from sklearn.model_selection import train_test_split, GridSearchCV
+from scipy.stats import randint
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+
+
+### RECOMMENDATION SYSTEM WITH COSINE SIMILARITY --------------------------------------------------------------------------------------------------------------------------------------------
+
+# Function to check if a name exists in the dataset (case insensitive)
+def name_exists(name, column, df):
+
+    # Convert the name to lowercase for case-insensitive comparison
+    all_names = df[column].dropna().apply(lambda x: [n.strip().lower() for n in x.split(', ')]) # removes the missing values
+    # of the column; divides the names separated by commas and transforms everything in lowcases, removing spaces
+
+    flat_names = set([n for sublist in all_names for n in sublist]) # creates a list without duplicates
+
+    return name.lower() in flat_names
+
+
+# Function to suggest full names based on part of the name or surname
+def suggest_exact_names(name, column, df):
+
+    # Transform all values in the column into lists of names and surnames, cleaning the spaces
+    all_names = df[column].dropna().apply(lambda x: [n.strip() for n in x.split(', ')])
+
+    # Flatten the list and remove duplicates
+    flat_names = list(set([entry for sublist in all_names for entry in sublist]))
+
+    # Use difflib to find similar names
+    suggestions = get_close_matches(name, flat_names, n = 5, cutoff = 0.8) # only suggests names with 80% or more similarity
+
+    # If no suggestions are found, search for the corresponding full name
+    if not suggestions:
+        suggestions = [entry for entry in flat_names if name.lower() in entry.lower()]
+
+    return suggestions
+
+# Function to get the correct name from the dataset, considering capitalization
+def get_correct_name(name, column, df):
+    all_names = df[column].dropna().apply(lambda x: [n.strip() for n in x.split(', ')])
+
+    for sublist in all_names: # goes trought all of the names
+        for real_name in sublist: # compares the given name with the dataset ones
+
+            if real_name.lower() == name.lower(): # if it matches, returns the name thats on the dataset
+                return real_name
+
+    return None # if theres not a match then it returns none
+
+# Function to collect user preferences
+def get_user_preferences_console(df):
+
+    # === GENRES ===
+    # Show unique genres available in the dataset
+    available_genres = df['genre'].str.split(', ').explode().unique()  # Extract unique genres
+    print("Genres available in the dataset:")
+
+    for idx, genre in enumerate(available_genres, 1):
+        print(f"{idx}. {genre}")
+
+    # Ask the user to choose up to 3 genres
+    chosen_genres = []
+
+    while len(chosen_genres) < 1 or len(chosen_genres) > 3:
+        genre_choice = input(f"Choose one of the genres above (up to 3 genres), separating by commas: ")
+
+        # Clean and split the input
+        genre_list = [genre.strip() for genre in genre_choice.split(",")]
+
+        # Check if all chosen genres are available in the dataset and haven't been chosen yet
+        valid_genres = [g for g in genre_list if g in available_genres and g not in chosen_genres]
+
+        # If valid genres
+        if valid_genres:
+            chosen_genres.extend(valid_genres)
+
+        else:
+            print("Invalid choice or genres already selected. Try again.")
+
+        # Limit to 3 genres
+        if len(chosen_genres) > 3:
+            print("You chose more than 3 genres. We will limit it to 3 genres.")
+            chosen_genres = chosen_genres[:3]
+
+    # === ACTORS ===
+    chosen_actors = []
+
+    while len(chosen_actors) < 3:
+        actor_input = input(f"What is you actor number {len(chosen_actors) + 1}? (If you don't want to choose one, type 'Ignore')").strip()
+
+        if actor_input == "Ignore":
+            break
+
+        if name_exists(actor_input, 'actors', df):
+            correct_name = get_correct_name(actor_input, 'actors', df)
+            chosen_actors.append(correct_name)
+
+        else:
+            print(f"The actor '{actor_input}' wasn't found in the dataset.")
+            suggestions = suggest_exact_names(actor_input, 'actors', df)
+
+            if suggestions:
+                print("Suggestions:", suggestions)
+
+            else:
+                print("No suggestions found. Try another name.")
+
+    if not chosen_actors:
+        print("The user didn't choose any actor.")
+
+    else:
+        print("Chosen actors:", chosen_actors)
+
+    # === DIRECTOR ===
+    chosen_directors = []
+
+    while len(chosen_directors) < 3:
+        director_input = input(f"What is your director number {len(chosen_directors) + 1}? (If you don't want to choose one, type 'Ignore')").strip()
+
+        if director_input == "Ignore":
+            break
+
+        if name_exists(director_input, 'director', df):
+            correct_director = get_correct_name(director_input, 'director', df)
+            chosen_directors.append(correct_director)
+
+
+        else:
+            print(f"The director '{director_input}' was not found in the dataset.")
+            suggestions = suggest_exact_names(director_input, 'director', df)
+
+            if suggestions:
+                print("Suggestions:", suggestions)
+
+            else:
+                print("No suggestions found. Try another name.")
+
+    if not chosen_directors:
+        print("The user didn't choose any director.")
+
+    else:
+        print("Chosen director:", chosen_directors)
+
+
+    combined_input = ' '.join(chosen_genres + chosen_actors + chosen_directors)
+
+    return combined_input
+
+
+# Prepare data for recommendation
+selected_columns = ['original_title', 'genre', 'director', 'actors', 'description']
+df_selected = df[selected_columns].astype(str).head(10000)
+
+df_selected['combined_features'] = df_selected.apply(lambda x: ' '.join(x), axis = 1)
+
+# Text Vectorization (TF-IDF)
+def create_feature_vectors(df):
+    vectorizer = TfidfVectorizer(stop_words = 'english')
+    feature_vectors = vectorizer.fit_transform(df['combined_features'])
+
+    # Dimensionality reduction using TruncatedSVD (SVD) to improve performance
+    svd = TruncatedSVD(n_components = 300, random_state = 42)
+    reduced_features = svd.fit_transform(feature_vectors)
+
+    return vectorizer, svd, feature_vectors, reduced_features
+
+# Function to compute similarity
+def compute_similarity(reduced_features):
+    return cosine_similarity(reduced_features)
+
+# Vectors and similarity matrix
+vectorizer, svd, feature_vectors, reduced_features = create_feature_vectors(df_selected)
+similarity_matrix = compute_similarity(reduced_features)
+
+
+
+# Function to recommend movies based on the title
+def recommend_movies(movie_title, num_recommendations = 5):
+    if movie_title not in df_selected['original_title'].values:
+        # If no movie is found, print suggestions and return an empty list
+        print("Movie not found. Try another title." , end = " ")
+
+        # Suggest similar titles if available
+        suggestions = get_close_matches(movie_title, df_selected['original_title'].tolist(), n = 5, cutoff = 0.5)
+
+        if suggestions:
+            print(", ".join(suggestions))  # Print suggestions in a horizontal format
+        else:
+            print("No suggestions available.")  # Inform that there are no suggestions
+
+        return []  # Return an empty list instead of None
+
+    movie_index = df_selected[df_selected['original_title'] == movie_title].index[0]
+    similarity_scores = list(enumerate(similarity_matrix[movie_index]))
+
+    similarity_scores = sorted(similarity_scores, key = lambda x: x[1], reverse = True)[1:num_recommendations + 1]
+    recommended_movies = [df_selected.iloc[i[0]]['original_title'] for i in similarity_scores]
+
+    return recommended_movies
+
+
+# === Main function of recommended by preferences ===
+
+def recommend_by_preferences(user_input, df_selected, vectorizer, svd, feature_vectors, num_recommendations = 5):
+    user_vector = vectorizer.transform([user_input])
+    user_vector_reduced = svd.transform(user_vector)
+    similarity_scores = cosine_similarity(user_vector_reduced, feature_vectors).flatten()
+    top_indices = similarity_scores.argsort()[::-1][:num_recommendations]
+    recommended_movies = df_selected.iloc[top_indices]['original_title'].tolist()
+    return recommended_movies
+
+# === Data preparation ===
+# TF-IDF + SVD
+vectorizer = TfidfVectorizer(stop_words = 'english')
+feature_vectors = vectorizer.fit_transform(df_selected['combined_features'])
+svd = TruncatedSVD(n_components = 300, random_state = 42)
+reduced_features = svd.fit_transform(feature_vectors)
+
+
+# === Recommendation by title ===
+while True:
+    # Ask the user to provide a movie title for recommendations
+    print("\n=== Recommendation System based on Title ===")
+    movie_title = input("\nEnter the title of a movie for similar recommendations (or 'exit' to quit): ")
+
+    if movie_title.lower() == 'exit':
+        print("Thank you for using the recommendation system! Goodbye!")
+        break
+
+    recommended_movies_title = recommend_movies(movie_title, 5)
+
+    # Display recommendations based on the provided title
+    print("\nRecommended movies based on the provided title:")
+    for movie in recommended_movies_title:
+        print(f"- {movie}")
+
+
+# === Recommendation by Preferences ===
+
+while True:
+    print("\n=== Recommendation System based on Preferences ===")
+    user_input = get_user_preferences_console(df_selected)
+
+    recommended_movies = recommend_by_preferences(
+        user_input,
+        df_selected,
+        vectorizer,
+        svd,
+        reduced_features,
+        num_recommendations = 5
+    )
+
+    print("\n🎬 Movies Recommended based on your preferences:")
+    for movie in recommended_movies:
+        print(f"- {movie}")
+
+    again = input("\nDo you want any further recommendations? (yes/no): ").strip().lower()
+    if again.lower() in ['no', 'n']:
+        print("Thank you for using the recommendation system!")
+        break
+
+    elif again.lower() not in ['yes', 'y']:
+       print("Let's start again!")
+
+
+
+### RECOMMENDATION SYSTEM WITH EUCLIDEAN DISTANCE -----------------------------------------------------------------------------------------------------------------------------------------------
+
+# Function to check if a name exists in the dataset (case insensitive)
+def name_exists(name, column, df):
+
+    # Convert the name to lowercase for case-insensitive comparison
+    all_names = df[column].dropna().apply(lambda x: [n.strip().lower() for n in x.split(', ')]) # removes the missing values
+    # of the column; divides the names separated by commas and transforms everything in lowcases, removing spaces
+
+    flat_names = set([n for sublist in all_names for n in sublist]) # creates a list without duplicates
+
+    return name.lower() in flat_names
+
+
+# Function to suggest full names based on part of the name or surname
+def suggest_exact_names(name, column, df):
+
+    # Transform all values in the column into lists of names and surnames, cleaning the spaces
+    all_names = df[column].dropna().apply(lambda x: [n.strip() for n in x.split(', ')])
+
+    # Flatten the list and remove duplicates
+    flat_names = list(set([entry for sublist in all_names for entry in sublist]))
+
+    # Use difflib to find similar names
+    suggestions = get_close_matches(name, flat_names, n = 5, cutoff = 0.8) # only suggests names with 80% or more similarity
+
+    # If no suggestions are found, search for the corresponding full name
+    if not suggestions:
+        suggestions = [entry for entry in flat_names if name.lower() in entry.lower()]
+
+    return suggestions
+
+# Function to get the correct name from the dataset, considering capitalization
+def get_correct_name(name, column, df):
+    all_names = df[column].dropna().apply(lambda x: [n.strip() for n in x.split(', ')])
+
+    for sublist in all_names: # goes trought all of the names
+        for real_name in sublist: # compares the given name with the dataset ones
+
+            if real_name.lower() == name.lower(): # if it matches, returns the name thats on the dataset
+                return real_name
+
+    return None # if theres not a match then it returns none
+
+# Function to collect user preferences
+def get_user_preferences_console(df):
+
+    # === GENRES ===
+    # Show unique genres available in the dataset
+    available_genres = df['genre'].str.split(', ').explode().unique()  # Extract unique genres
+    print("Genres available in the dataset:")
+
+    for idx, genre in enumerate(available_genres, 1):
+        print(f"{idx}. {genre}")
+
+    # Ask the user to choose up to 3 genres
+    chosen_genres = []
+
+    while len(chosen_genres) < 1 or len(chosen_genres) > 3:
+        genre_choice = input(f"Choose one of the genres above (up to 3 genres), separating by commas: ")
+
+        # Clean and split the input
+        genre_list = [genre.strip() for genre in genre_choice.split(",")]
+
+        # Check if all chosen genres are available in the dataset and haven't been chosen yet
+        valid_genres = [g for g in genre_list if g in available_genres and g not in chosen_genres]
+
+        # If valid genres
+        if valid_genres:
+            chosen_genres.extend(valid_genres)
+
+        else:
+            print("Invalid choice or genres already selected. Try again.")
+
+        # Limit to 3 genres
+        if len(chosen_genres) > 3:
+            print("You chose more than 3 genres. We will limit it to 3 genres.")
+            chosen_genres = chosen_genres[:3]
+
+    # === ACTORS ===
+    chosen_actors = []
+
+    while len(chosen_actors) < 3:
+        actor_input = input(f"What is you actor number {len(chosen_actors) + 1}? (If you don't want to choose one, type 'Ignore')").strip()
+
+        if actor_input == "Ignore":
+            break
+
+        if name_exists(actor_input, 'actors', df):
+            correct_name = get_correct_name(actor_input, 'actors', df)
+            chosen_actors.append(correct_name)
+
+        else:
+            print(f"The actor '{actor_input}' wasn't found in the dataset.")
+            suggestions = suggest_exact_names(actor_input, 'actors', df)
+
+            if suggestions:
+                print("Suggestions:", suggestions)
+
+            else:
+                print("No suggestions found. Try another name.")
+
+    if not chosen_actors:
+        print("The user didn't choose any actor.")
+
+    else:
+        print("Chosen actors:", chosen_actors)
+
+    # === DIRECTOR ===
+    chosen_directors = []
+
+    while len(chosen_directors) < 3:
+        director_input = input(f"What is your director number {len(chosen_directors) + 1}? (If you don't want to choose one, type 'Ignore')").strip()
+
+        if director_input == "Ignore":
+            break
+
+        if name_exists(director_input, 'director', df):
+            correct_director = get_correct_name(director_input, 'director', df)
+            chosen_directors.append(correct_director)
+
+
+        else:
+            print(f"The director '{director_input}' was not found in the dataset.")
+            suggestions = suggest_exact_names(director_input, 'director', df)
+
+            if suggestions:
+                print("Suggestions:", suggestions)
+
+            else:
+                print("No suggestions found. Try another name.")
+
+    if not chosen_directors:
+        print("The user didn't choose any director.")
+
+    else:
+        print("Chosen director:", chosen_directors)
+
+
+    combined_input = ' '.join(chosen_genres + chosen_actors + chosen_directors)
+
+    return combined_input
+
+
+# Prepare data for recommendation
+selected_columns = ['original_title', 'genre', 'director', 'actors', 'description']
+df_selected = df[selected_columns].astype(str).head(10000)
+
+df_selected['combined_features'] = df_selected.apply(lambda x: ' '.join(x), axis = 1)
+
+# Text Vectorization (TF-IDF)
+def create_feature_vectors(df):
+    vectorizer = TfidfVectorizer(stop_words = 'english')
+    feature_vectors = vectorizer.fit_transform(df['combined_features'])
+
+    # Dimensionality reduction using TruncatedSVD (SVD) to improve performance
+    svd = TruncatedSVD(n_components = 300, random_state = 42)
+    reduced_features = svd.fit_transform(feature_vectors)
+
+    return vectorizer, svd, feature_vectors, reduced_features
+
+# Function to compute similarity
+def compute_similarity_euclidean(reduced_features):
+    distances = euclidean_distances(reduced_features)
+    similarity = 1 / (1 + distances)  # Convert to similarity-like score
+    return similarity
+
+
+# Vectors and similarity matrix
+vectorizer, svd, feature_vectors, reduced_features = create_feature_vectors(df_selected)
+similarity_matrix = compute_similarity_euclidean(reduced_features)
+
+
+
+# Function to recommend movies based on the title
+def recommend_movies(movie_title, num_recommendations = 5):
+    if movie_title not in df_selected['original_title'].values:
+        # If no movie is found, print suggestions and return an empty list
+        print("Movie not found. Try another title." , end = " ")
+
+        # Suggest similar titles if available
+        suggestions = get_close_matches(movie_title, df_selected['original_title'].tolist(), n = 5, cutoff = 0.5)
+
+        if suggestions:
+            print(", ".join(suggestions))  # Print suggestions in a horizontal format
+        else:
+            print("No suggestions available.")  # Inform that there are no suggestions
+
+        return []  # Return an empty list instead of None
+
+    movie_index = df_selected[df_selected['original_title'] == movie_title].index[0]
+    similarity_scores = list(enumerate(similarity_matrix[movie_index]))
+
+    similarity_scores = sorted(similarity_scores, key = lambda x: x[1], reverse = True)[1:num_recommendations + 1]
+    recommended_movies = [df_selected.iloc[i[0]]['original_title'] for i in similarity_scores]
+
+    return recommended_movies
+
+
+# === Main function of recommended by preferences ===
+
+def recommend_by_preferences(user_input, df_selected, vectorizer, svd, feature_vectors, num_recommendations = 5):
+    user_vector = vectorizer.transform([user_input])
+    user_vector_reduced = svd.transform(user_vector)
+    similarity_scores = cosine_similarity(user_vector_reduced, feature_vectors).flatten()
+    top_indices = similarity_scores.argsort()[::-1][:num_recommendations]
+    recommended_movies = df_selected.iloc[top_indices]['original_title'].tolist()
+    return recommended_movies
+
+# === Data preparation ===
+# TF-IDF + SVD
+vectorizer = TfidfVectorizer(stop_words = 'english')
+feature_vectors = vectorizer.fit_transform(df_selected['combined_features'])
+svd = TruncatedSVD(n_components = 300, random_state = 42)
+reduced_features = svd.fit_transform(feature_vectors)
+
+
+# === Recommendation by title ===
+while True:
+    # Ask the user to provide a movie title for recommendations
+    print("\n=== Recommendation System based on Title ===")
+    movie_title = input("\nEnter the title of a movie for similar recommendations (or 'exit' to quit): ")
+
+    if movie_title.lower() == 'exit':
+        print("Thank you for using the recommendation system! Goodbye!")
+        break
+
+    recommended_movies_title = recommend_movies(movie_title, 5)
+
+    # Display recommendations based on the provided title
+    print("\nRecommended movies based on the provided title:")
+    for movie in recommended_movies_title:
+        print(f"- {movie}")
+
+
+# === Recommendation by Preferences ===
+
+while True:
+    print("\n=== Recommendation System based on Preferences ===")
+    user_input = get_user_preferences_console(df_selected)
+
+    recommended_movies = recommend_by_preferences(
+        user_input,
+        df_selected,
+        vectorizer,
+        svd,
+        reduced_features,
+        num_recommendations = 5
+    )
+
+    print("\n🎬 Movies Recommended based on your preferences:")
+    for movie in recommended_movies:
+        print(f"- {movie}")
+
+    again = input("\nDo you want any further recommendations? (yes/no): ").strip().lower()
+    if again.lower() in ['no', 'n']:
+        print("Thank you for using the recommendation system!")
+        break
+
+    elif again.lower() not in ['yes', 'y']:
+       print("Let's start again!")
+
+
+
+### RECOMMENDATION SYSTEM WITH PEARSON CORRELATION ---------------------------------------------------------------------------------------------------------------------------------------------
+
+# Function to check if a name exists in the dataset (case insensitive)
+def name_exists(name, column, df):
+
+    # Convert the name to lowercase for case-insensitive comparison
+    all_names = df[column].dropna().apply(lambda x: [n.strip().lower() for n in x.split(', ')]) # removes the missing values
+    # of the column; divides the names separated by commas and transforms everything in lowcases, removing spaces
+
+    flat_names = set([n for sublist in all_names for n in sublist]) # creates a list without duplicates
+
+    return name.lower() in flat_names
+
+
+# Function to suggest full names based on part of the name or surname
+def suggest_exact_names(name, column, df):
+
+    # Transform all values in the column into lists of names and surnames, cleaning the spaces
+    all_names = df[column].dropna().apply(lambda x: [n.strip() for n in x.split(', ')])
+
+    # Flatten the list and remove duplicates
+    flat_names = list(set([entry for sublist in all_names for entry in sublist]))
+
+    # Use difflib to find similar names
+    suggestions = get_close_matches(name, flat_names, n = 5, cutoff = 0.8) # only suggests names with 80% or more similarity
+
+    # If no suggestions are found, search for the corresponding full name
+    if not suggestions:
+        suggestions = [entry for entry in flat_names if name.lower() in entry.lower()]
+
+    return suggestions
+
+# Function to get the correct name from the dataset, considering capitalization
+def get_correct_name(name, column, df):
+    all_names = df[column].dropna().apply(lambda x: [n.strip() for n in x.split(', ')])
+
+    for sublist in all_names: # goes trought all of the names
+        for real_name in sublist: # compares the given name with the dataset ones
+
+            if real_name.lower() == name.lower(): # if it matches, returns the name thats on the dataset
+                return real_name
+
+    return None # if theres not a match then it returns none
+
+# Function to collect user preferences
+def get_user_preferences_console(df):
+
+    # === GENRES ===
+    # Show unique genres available in the dataset
+    available_genres = df['genre'].str.split(', ').explode().unique()  # Extract unique genres
+    print("Genres available in the dataset:")
+
+    for idx, genre in enumerate(available_genres, 1):
+        print(f"{idx}. {genre}")
+
+    # Ask the user to choose up to 3 genres
+    chosen_genres = []
+
+    while len(chosen_genres) < 1 or len(chosen_genres) > 3:
+        genre_choice = input(f"Choose one of the genres above (up to 3 genres), separating by commas: ")
+
+        # Clean and split the input
+        genre_list = [genre.strip() for genre in genre_choice.split(",")]
+
+        # Check if all chosen genres are available in the dataset and haven't been chosen yet
+        valid_genres = [g for g in genre_list if g in available_genres and g not in chosen_genres]
+
+        # If valid genres
+        if valid_genres:
+            chosen_genres.extend(valid_genres)
+
+        else:
+            print("Invalid choice or genres already selected. Try again.")
+
+        # Limit to 3 genres
+        if len(chosen_genres) > 3:
+            print("You chose more than 3 genres. We will limit it to 3 genres.")
+            chosen_genres = chosen_genres[:3]
+
+    # === ACTORS ===
+    chosen_actors = []
+
+    while len(chosen_actors) < 3:
+        actor_input = input(f"What is you actor number {len(chosen_actors) + 1}? (If you don't want to choose one, type 'Ignore')").strip()
+
+        if actor_input == "Ignore":
+            break
+
+        if name_exists(actor_input, 'actors', df):
+            correct_name = get_correct_name(actor_input, 'actors', df)
+            chosen_actors.append(correct_name)
+
+        else:
+            print(f"The actor '{actor_input}' wasn't found in the dataset.")
+            suggestions = suggest_exact_names(actor_input, 'actors', df)
+
+            if suggestions:
+                print("Suggestions:", suggestions)
+
+            else:
+                print("No suggestions found. Try another name.")
+
+    if not chosen_actors:
+        print("The user didn't choose any actor.")
+
+    else:
+        print("Chosen actors:", chosen_actors)
+
+    # === DIRECTOR ===
+    chosen_directors = []
+
+    while len(chosen_directors) < 3:
+        director_input = input(f"What is your director number {len(chosen_directors) + 1}? (If you don't want to choose one, type 'Ignore')").strip()
+
+        if director_input == "Ignore":
+            break
+
+        if name_exists(director_input, 'director', df):
+            correct_director = get_correct_name(director_input, 'director', df)
+            chosen_directors.append(correct_director)
+
+
+        else:
+            print(f"The director '{director_input}' was not found in the dataset.")
+            suggestions = suggest_exact_names(director_input, 'director', df)
+
+            if suggestions:
+                print("Suggestions:", suggestions)
+
+            else:
+                print("No suggestions found. Try another name.")
+
+    if not chosen_directors:
+        print("The user didn't choose any director.")
+
+    else:
+        print("Chosen director:", chosen_directors)
+
+
+    combined_input = ' '.join(chosen_genres + chosen_actors + chosen_directors)
+
+    return combined_input
+
+
+# Prepare data for recommendation
+selected_columns = ['original_title', 'genre', 'director', 'actors', 'description']
+df_selected = df[selected_columns].astype(str).head(10000)
+
+df_selected['combined_features'] = df_selected.apply(lambda x: ' '.join(x), axis = 1)
+
+# Text Vectorization (TF-IDF)
+def create_feature_vectors(df):
+    vectorizer = TfidfVectorizer(stop_words = 'english')
+    feature_vectors = vectorizer.fit_transform(df['combined_features'])
+
+    # Dimensionality reduction using TruncatedSVD (SVD) to improve performance
+    svd = TruncatedSVD(n_components = 300, random_state = 42)
+    reduced_features = svd.fit_transform(feature_vectors)
+
+    return vectorizer, svd, feature_vectors, reduced_features
+
+# Function to compute similarity
+def compute_similarity_euclidean(reduced_features):
+    distances = euclidean_distances(reduced_features)
+    similarity = 1 / (1 + distances)  # Convert to similarity-like score
+    return similarity
+
+
+# Vectors and similarity matrix
+vectorizer, svd, feature_vectors, reduced_features = create_feature_vectors(df_selected)
+similarity_matrix = compute_similarity_euclidean(reduced_features)
+
+
+
+# Function to recommend movies based on the title
+def recommend_movies(movie_title, num_recommendations = 5):
+    if movie_title not in df_selected['original_title'].values:
+        # If no movie is found, print suggestions and return an empty list
+        print("Movie not found. Try another title." , end = " ")
+
+        # Suggest similar titles if available
+        suggestions = get_close_matches(movie_title, df_selected['original_title'].tolist(), n = 5, cutoff = 0.5)
+
+        if suggestions:
+            print(", ".join(suggestions))  # Print suggestions in a horizontal format
+        else:
+            print("No suggestions available.")  # Inform that there are no suggestions
+
+        return []  # Return an empty list instead of None
+
+    movie_index = df_selected[df_selected['original_title'] == movie_title].index[0]
+    similarity_scores = list(enumerate(similarity_matrix[movie_index]))
+
+    similarity_scores = sorted(similarity_scores, key = lambda x: x[1], reverse = True)[1:num_recommendations + 1]
+    recommended_movies = [df_selected.iloc[i[0]]['original_title'] for i in similarity_scores]
+
+    return recommended_movies
+
+
+# === Main function of recommended by preferences ===
+
+def recommend_by_preferences(user_input, df_selected, vectorizer, svd, feature_vectors, num_recommendations = 5):
+    user_vector = vectorizer.transform([user_input])
+    user_vector_reduced = svd.transform(user_vector)
+    similarity_scores = cosine_similarity(user_vector_reduced, feature_vectors).flatten()
+    top_indices = similarity_scores.argsort()[::-1][:num_recommendations]
+    recommended_movies = df_selected.iloc[top_indices]['original_title'].tolist()
+    return recommended_movies
+
+# === Data preparation ===
+# TF-IDF + SVD
+vectorizer = TfidfVectorizer(stop_words = 'english')
+feature_vectors = vectorizer.fit_transform(df_selected['combined_features'])
+svd = TruncatedSVD(n_components = 300, random_state = 42)
+reduced_features = svd.fit_transform(feature_vectors)
+
+
+# === Recommendation by title ===
+while True:
+    # Ask the user to provide a movie title for recommendations
+    print("\n=== Recommendation System based on Title ===")
+    movie_title = input("\nEnter the title of a movie for similar recommendations (or 'exit' to quit): ")
+
+    if movie_title.lower() == 'exit':
+        print("Thank you for using the recommendation system! Goodbye!")
+        break
+
+    recommended_movies_title = recommend_movies(movie_title, 5)
+
+    # Display recommendations based on the provided title
+    print("\nRecommended movies based on the provided title:")
+    for movie in recommended_movies_title:
+        print(f"- {movie}")
+
+
+# === Recommendation by Preferences ===
+
+while True:
+    print("\n=== Recommendation System based on Preferences ===")
+    user_input = get_user_preferences_console(df_selected)
+
+    recommended_movies = recommend_by_preferences(
+        user_input,
+        df_selected,
+        vectorizer,
+        svd,
+        reduced_features,
+        num_recommendations = 5
+    )
+
+    print("\n🎬 Movies Recommended based on your preferences:")
+    for movie in recommended_movies:
+        print(f"- {movie}")
+
+    again = input("\nDo you want any further recommendations? (yes/no): ").strip().lower()
+    if again.lower() in ['no', 'n']:
+        print("Thank you for using the recommendation system!")
+        break
+
+    elif again.lower() not in ['yes', 'y']:
+       print("Let's start again!")
+
+
+# EVALUATION METRICS --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Data Prep
+df = df_selected[['description', 'genre']].dropna()
+
+# Convert genre strings into lists (split by comma)
+df['genre'] = df['genre'].apply(lambda x: [genre.strip() for genre in x.split(',')])
+
+# Binarize the multi-label genres
+mlb = MultiLabelBinarizer()            # Creates an instance of the encoder; This code uses MultiLabelBinarizer to convert a
+                                       # column containing multiple labels per entry into a binary (one-hot encoded) format
+y = mlb.fit_transform(df['genre'])     # Transforms the 'genre' column into binary vectors
+
+
+# Split into training and test sets
+X_train, X_test, y_train, y_test = train_test_split(
+    df['description'], y, test_size = 0.2, random_state = 42
+)
+
+# Create pipeline: TF-IDF + Multi-output Logistic Regression
+pipeline = Pipeline([
+    ('tfidf', TfidfVectorizer(stop_words = 'english', max_features = 5000)),
+    ('clf', MultiOutputClassifier(LogisticRegression(max_iter = 1000)))
+])
+
+# Train the model
+pipeline.fit(X_train, y_train)
+
+# Make predictions
+y_pred = pipeline.predict(X_test)
+
+# Evaluation
+print("Classification Report:")
+print(classification_report(y_test, y_pred, target_names = mlb.classes_))
+
+# Metrics Description:
+
+# Precision: Out of all the times the model predicted this class, how many were correct? Formula: TP / (TP + FP)
+#            example: Precision = 0.43 → When the model predicted this class, it was right 43% of the time.
+
+# Recall: Out of all the actual examples of this class, how many did the model correctly find? Formula: TP / (TP + FN)
+#         example: Recall = 0.02 → Out of 191 real examples of this class, it only found 2%.
+
+# F1-score: The harmonic mean of precision and recall. A balanced measure when you care about both false positives
+#           and false negatives. Formula: 2 * (precision * recall) / (precision + recall)
+#           example: F1-score = 0.03 → Low overall performance for this class (poor balance between precision and recall).
+
+# Support: The number of real examples of this class in the test set.
+#          example: Support = 191 → There were 191 actual examples of this class in the test set.
+
+
+
+# GRID SEARCH -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Data Prep
+df = df_selected[['description', 'genre']].dropna()
+
+# Convert genre strings into lists (split by comma)
+df['genre'] = df['genre'].apply(lambda x: [genre.strip() for genre in x.split(',')])
+
+# Binarize the multi-label genres
+mlb = MultiLabelBinarizer()
+y = mlb.fit_transform(df['genre'])
+
+# Split into training and test sets
+X_train, X_test, y_train, y_test = train_test_split(
+    df['description'], y, test_size = 0.2, random_state = 42
+)
+
+# Define pipeline
+pipeline = Pipeline([
+    ('tfidf', TfidfVectorizer(stop_words = 'english', max_features = 5000)),
+    ('clf', MultiOutputClassifier(LogisticRegression(max_iter = 4000, class_weight = 'balanced')))
+    # added class_weight = 'balanced' because the Animation genre was being ignored, but decreased my
+    # precision and improved my recall; The model has 1.00 precision for Animation because it only predicted
+    # it once and got it right, but missed 9 out of 10 actual cases, leading to low recall; f1-score is low
+    # because of the prediction and the recall; the number of iterations increased because of a warning its
+    # giving me, but the warning is still in the output (see this)
+])
+
+# Parameter grid for GridSearchCV
+param_grid = {
+    'tfidf__max_features': [15200, 15500, 15700], # limits the number of words TfidfVectorizer will consider;
+                                                  # Too few = not enough information; too many = more noise, slower training;
+                                                  # we have 85000 rows so we are trying on these values
+
+    'clf__estimator__C': [155, 160, 165],            # Controls the regularization strength of LogisticRegression;
+                                                     # Lower C = stronger regularization (simpler model);
+                                                     # higher C = weaker regularization (more flexible model)
+
+    'clf__estimator__max_iter': [70, 75, 80]   # Sets the maximum number of iterations for the solver to find the best model;
+                                               # Logistic Regression uses optimization — if your data is large or complex,
+                                               # it may need more steps to converge.
+}
+
+# When I had this parameters:
+
+# 'tfidf__max_features': [5000, 10000, 20000] -> ... -> [9000, 10000, 11000] -> [10000, 12000, 15000]
+#                        -> [14000, 16000, 17000] -> [15500, 16000, 16500]
+# 'clf__estimator__C': [500, 1000, 2000] -> [50, 100, 200] -> [100, 150, 200] -> [50, 100, 150] -> [130, 150, 170]
+#                      -> [145, 150, 155]
+# 'clf__estimator__max_iter': [500, 1000, 2000] -> ... -> [300, 350, 400] -> [100, 200, 300] -> [50, 100, 150]
+#                             -> [80, 100, 110]
+
+# I got this:
+# Best parameters found: {'clf__estimator__C': 100, 'clf__estimator__max_iter': 500, 'tfidf__max_features': 10000}
+# Best parameters found: {'clf__estimator__C': 200, 'clf__estimator__max_iter': 500, 'tfidf__max_features': 8000}
+# Best parameters found: {'clf__estimator__C': 100, 'clf__estimator__max_iter': 300, 'tfidf__max_features': 11000}
+# Best parameters found: {'clf__estimator__C': 150, 'clf__estimator__max_iter': 100, 'tfidf__max_features': 15000}
+# Best parameters found: {'clf__estimator__C': 150, 'clf__estimator__max_iter': 100, 'tfidf__max_features': 16000}
+# Best parameters found: {'clf__estimator__C': 155, 'clf__estimator__max_iter': 80, 'tfidf__max_features': 15500}
+
+
+# GridSearchCV setup
+grid_search = GridSearchCV(
+    pipeline,
+    param_grid,
+    cv = 3,
+    scoring = 'f1_micro', # changed the scoring from f1_micro (o melhor) -> f1_weighted = f1_macro
+                              # -> precision_micro (melhora todos (a precison fica muito boa com este) e piora o recall)
+                              # -> recall_micro (melhora o recall mas piora o f1-score e mantém o precision)
+    verbose = 2,
+    n_jobs = -1
+)
+
+# Fit the model with grid search
+grid_search.fit(X_train, y_train)
+
+# Predict on test set with best estimator
+y_pred = grid_search.best_estimator_.predict(X_test)
+
+# Evaluation
+print("Best parameters found:", grid_search.best_params_)
+print("Classification Report:")
+print(classification_report(y_test, y_pred, target_names = mlb.classes_))
+
+# micro_avg: Calculates metrics globally — it sums up all true positives, false positives,
+#            and false negatives across all labels, then computes precision/recall/F1.
+#            example: F1 = 0.50 means the model gets half of the label predictions right overall.
+
+# macro_avg: Calculates precision, recall, and F1 individually for each label, then takes
+#            the unweighted average (treats all genres equally).
+#            example: F1 = 0.33 is lower than micro because the model may be bad at rare genres
+
+# weighted_avg: Like macro, but weights each label by how often it appears;
+#               example: F1 = 0.48 — closer to micro F1, because frequent genres have more weight
+
+# samples_avg: For each individual sample, it calculates:
+
+#              precision = how many predicted genres were correct,
+#              recall = how many of the true genres were found,
+#              F1-score = harmonic mean of those two.
+#              Then it averages these F1-scores across all samples.
+
+
+
+# RANDOM SEARCH ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# Data preparation
+df = df_selected[['description', 'genre']].dropna()
+
+# Convert genre strings into lists (split by comma)
+df['genre'] = df['genre'].apply(lambda x: [genre.strip() for genre in x.split(',')])
+
+# Binarize the multi-label genres
+mlb = MultiLabelBinarizer()
+y = mlb.fit_transform(df['genre'])
+
+# Split into training and test sets
+X_train, X_test, y_train, y_test = train_test_split(
+    df['description'], y, test_size = 0.2, random_state = 42
+)
+
+# Modeling pipeline
+pipeline = Pipeline([
+    ('tfidf', TfidfVectorizer(stop_words = 'english', max_features = 5000)),
+    ('clf', MultiOutputClassifier(
+        LogisticRegression(max_iter = 4000, class_weight = 'balanced')))
+])
+
+# Parameter distribution for RandomizedSearchCV
+param_dist = {
+    'tfidf__max_features': randint(14000, 17000),
+    'clf__estimator__C': randint(100, 200),
+    'clf__estimator__max_iter': randint(50, 150)
+}
+
+# RandomizedSearchCV configuration
+random_search = RandomizedSearchCV(
+    pipeline,
+    param_distributions = param_dist,
+    n_iter = 20,             # number of random combinations to try
+    cv = 3,
+    scoring = 'f1_micro',
+    verbose = 2,
+    random_state = 42,
+    n_jobs = -1
+)
+
+# Train model
+random_search.fit(X_train, y_train)
+
+# Evaluation
+y_pred = random_search.best_estimator_.predict(X_test)
+
+print("Best parameters found:", random_search.best_params_)
+print("Classification report:")
+print(classification_report(y_test, y_pred, target_names = mlb.classes_))
+
+# usar apenas as avg - no relatório
