@@ -1,0 +1,57 @@
+import pandas as pd
+import numpy as np
+import re
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import linear_kernel
+from sklearn.metrics.pairwise import euclidean_distances
+import cudf
+from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.multioutput import MultiOutputClassifier
+from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.metrics import classification_report
+from sklearn.model_selection import train_test_split, GridSearchCV
+from scipy.stats import randint
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+
+# Extension to use GPU
+%load_ext cudf.pandas
+
+nrows = 13000
+skiprows = 0
+
+header = pd.read_csv(r'movies.csv', delimiter = ';', nrows = 0).columns
+
+batches = {}
+
+for i in range(1, 8):
+    data = pd.read_csv(r'movies.csv', delimiter = ';', skiprows = skiprows + 1, nrows = nrows, names = header)
+    print(f'Batch {i} - SKIPROWS: {skiprows}')
+
+    batches[f'batch_{i}'] = data
+
+    skiprows += nrows
+
+def preprocess_batch(data):
+    data.dropna(subset = ['actors', 'director', 'writer', 'original_title', 'description', 'genre'], inplace = True, axis = 0)
+
+    data = data.reset_index(drop = True)
+
+    data['description'] = [re.sub(r'[^\w\s]', '', str(t)) for t in data['description']]
+    data['actors'] = [re.sub(',', ' ', re.sub(' ', '', str(t))) for t in data['actors']]
+    data['director'] = [re.sub(',', ' ', re.sub(' ', '', str(t))) for t in data['director']]
+    data['writer'] = [re.sub(',', ' ', re.sub(' ', '', str(t))) for t in data['writer']]
+    data['original_title'] = [re.sub(r'[^\w\s]', '', str(t)) for t in data['original_title']]
+    data['original_title'] = [str(t).strip() for t in data['original_title']]
+    data['genre'] = [re.sub(',', ' ', re.sub(' ', '', str(t))) for t in data['genre']]
+
+    data["combined"] = (
+        data['genre'] + '  ' + data['actors'] + ' ' + data['director'] + ' '
+        + data['writer'] + ' ' + data['original_title'] + ' ' + data['description']
+    )
+
+    data.drop(['actors', 'director', 'writer', 'description', 'genre'], axis = 1, inplace = True)
+
+    return data
